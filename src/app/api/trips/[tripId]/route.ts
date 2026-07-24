@@ -3,14 +3,15 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import type { Trip, Stop, Photo } from "@prisma/client";
+import type { Trip, Stop, Photo, Tag, StopTag } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
 
-type StopWithPhotos = Stop & { photos: Photo[] };
-type TripFull = Trip & { stops: StopWithPhotos[] };
+type StopTagWithTag = StopTag & { tag: Tag };
+type StopWithRelations = Stop & { photos: Photo[]; tags: StopTagWithTag[] };
+type TripFull = Trip & { stops: StopWithRelations[] };
 
 function serializePhoto(p: Photo) {
   return {
@@ -25,7 +26,15 @@ function serializePhoto(p: Photo) {
   };
 }
 
-function serializeStop(s: StopWithPhotos) {
+function serializeTag(st: StopTagWithTag) {
+  return {
+    id: st.tag.id,
+    label: st.tag.label,
+    kind: st.tag.kind as "mood" | "activity",
+  };
+}
+
+function serializeStop(s: StopWithRelations) {
   return {
     id: s.id,
     order: s.order,
@@ -36,7 +45,7 @@ function serializeStop(s: StopWithPhotos) {
     locationPrecision: s.locationPrecision,
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
-    tags: [] as never[],
+    tags: s.tags.map(serializeTag),
     photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializePhoto),
   };
 }
@@ -69,7 +78,10 @@ function loadFullTrip(tripId: string) {
     include: {
       stops: {
         orderBy: { order: "asc" },
-        include: { photos: { orderBy: { order: "asc" } } },
+        include: {
+          photos: { orderBy: { order: "asc" } },
+          tags: { orderBy: { tag: { label: "asc" } }, include: { tag: true } },
+        },
       },
     },
   });

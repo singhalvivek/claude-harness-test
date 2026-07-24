@@ -45,6 +45,7 @@ model Stop {
   updatedAt         DateTime  @updatedAt
 
   photos Photo[]
+  tags   StopTag[]
 
   @@unique([tripId, order])
 }
@@ -64,4 +65,25 @@ model Photo {
   createdAt   DateTime @default(now())
 
   @@unique([stopId, order])
+}
+
+// Phase 2 — mood/activity tags. Many-to-many with Stop via the StopTag join
+// table (SQLite has no scalar-list columns, so tags use a relation table).
+model Tag {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  // "mood" | "activity"
+  kind      String
+  createdAt DateTime @default(now())
+
+  stops StopTag[]
+}
+
+model StopTag {
+  stopId String
+  tagId  String
+  stop   Stop @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([stopId, tagId])
 }

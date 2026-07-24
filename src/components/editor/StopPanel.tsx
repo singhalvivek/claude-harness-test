@@ -151,16 +151,6 @@ export function StopPanel({
         </section>
 
         <section>
-          <div className="mb-2 flex items-center gap-2">
-            <span className="text-sm font-medium text-ink">Tags</span>
-            <ComingSoonPill label="Mood & activity tags" testId="tags-coming-soon" />
-          </div>
-          <div className="rounded-md border border-dashed border-ink/15 px-3 py-2 text-xs text-ink/40">
-            Tagging arrives in a later phase.
-          </div>
-        </section>
-
-        <section>
           <PhotoUploader stopId={stop.id} photos={stop.photos} refresh={refresh} />
         </section>
       </div>

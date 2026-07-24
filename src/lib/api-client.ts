@@ -265,3 +265,64 @@ export function reverseGeocode(lat: number, lng: number): Promise<{ displayName:
     `/api/geocode/reverse?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
   );
 }
+
+// ─── Tags (Phase 2) ──────────────────────────────────────────────────────────
+
+/** All tags in the workspace, ordered by label. */
+export async function listTags(): Promise<Tag[]> {
+  const data = await request<{ tags: Tag[] }>("/api/tags");
+  return data.tags;
+}
+
+/** Create-or-find a tag by its unique label; a reused label returns the same row. */
+export async function createTag(label: string, kind: "mood" | "activity"): Promise<Tag> {
+  const data = await request<{ tag: Tag }>("/api/tags", jsonInit("POST", { label, kind }));
+  return data.tag;
+}
+
+/**
+ * Attach a tag to a stop — either an existing `tagId` or a `{ label, kind }` to
+ * create-or-find. Idempotent. Resolves to the stop's tags after the change.
+ */
+export async function addStopTag(
+  stopId: string,
+  input: { tagId?: string; label?: string; kind?: "mood" | "activity" },
+): Promise<Tag[]> {
+  const data = await request<{ tags: Tag[] }>(
+    `/api/stops/${encodeURIComponent(stopId)}/tags`,
+    jsonInit("POST", input),
+  );
+  return data.tags;
+}
+
+/** Detach a tag from a stop (idempotent). Resolves to the stop's remaining tags. */
+export async function removeStopTag(stopId: string, tagId: string): Promise<Tag[]> {
+  const data = await request<{ tags: Tag[] }>(
+    `/api/stops/${encodeURIComponent(stopId)}/tags/${encodeURIComponent(tagId)}`,
+    { method: "DELETE" },
+  );
+  return data.tags;
+}
+
+// ─── Publish / Public read (Phase 2) ─────────────────────────────────────────
+
+/** Publish a trip; returns the public share URL. */
+export async function publishTrip(tripId: string): Promise<{ shareUrl: string }> {
+  return request<{ shareUrl: string }>(
+    `/api/trips/${encodeURIComponent(tripId)}/publish`,
+    { method: "POST" },
+  );
+}
+
+/** Unpublish a trip, revoking its public share link. */
+export async function unpublishTrip(tripId: string): Promise<void> {
+  await request<{ ok: true }>(
+    `/api/trips/${encodeURIComponent(tripId)}/unpublish`,
+    { method: "POST" },
+  );
+}
+
+/** Read a published trip by its share slug (404 if unknown/unpublished). */
+export function getPublicTrip(slug: string): Promise<Trip> {
+  return request<Trip>(`/api/public/trips/${encodeURIComponent(slug)}`);
+}

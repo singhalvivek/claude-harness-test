@@ -143,10 +143,4 @@ test("owner can log in, author a trip with stops/photos, and reorder", async ({ 
       return t ?? "";
     })
     .toContain("Alpha");
-
-  // 8. A labelled "coming soon" stub is visible and inert (a non-interactive span).
-  const stub = page.getByTestId("map-overview-coming-soon");
-  await expect(stub).toBeVisible();
-  await expect(stub).toContainText(/coming soon/i);
-  expect(await stub.evaluate((el) => el.tagName.toLowerCase())).toBe("span");
 });

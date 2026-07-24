@@ -8,8 +8,9 @@ import { TripHeader, type SaveStatus } from "@/components/editor/TripHeader";
 import { ThemePicker } from "@/components/editor/ThemePicker";
 import { StopList } from "@/components/editor/StopList";
 import { StopPanel } from "@/components/editor/StopPanel";
+import { PublishButton } from "@/components/share/PublishButton";
+import { StopTagsEditor } from "@/components/tags/StopTagsEditor";
 import { Button } from "@/components/ui/Button";
-import { ComingSoonPill } from "@/components/ui/Pill";
 import { Skeleton } from "@/components/ui/Spinner";
 import { getErrorMessage } from "@/components/ui/errors";
 
@@ -162,14 +163,14 @@ export default function EditorPage() {
         <>
           <TripHeader trip={trip} onSaveStatus={setSaveStatus} refresh={refresh} />
 
-          <div className="mt-6">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <ThemePicker trip={trip} refresh={refresh} onSaveStatus={setSaveStatus} />
+            <PublishButton trip={trip} refresh={refresh} onSaveStatus={setSaveStatus} />
           </div>
 
           <section className="mt-8">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <h2 className="font-serif text-2xl text-ink">Stops</h2>
-              <ComingSoonPill label="Map overview" testId="map-overview-coming-soon" />
               <Button
                 data-testid="add-stop-button"
                 onClick={handleAddStop}
@@ -196,6 +197,42 @@ export default function EditorPage() {
               />
             )}
           </section>
+
+          {trip.stops.length > 0 && (
+            <section className="mt-10">
+              <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
+                <h2 className="font-serif text-2xl text-ink">Tags</h2>
+                <p className="text-xs text-ink/50">
+                  Attach mood &amp; activity tags to each stop — saved instantly.
+                </p>
+              </div>
+              <ul data-testid="stop-tags-list" className="mt-3 space-y-3">
+                {trip.stops.map((stop, i) => {
+                  const label = stop.placeName || stop.title || "Untitled stop";
+                  return (
+                    <li
+                      key={stop.id}
+                      data-testid="stop-tags-row"
+                      data-stop-id={stop.id}
+                      className="rounded-lg border border-ink/10 bg-white/60 p-3"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-trail/10 text-xs font-semibold text-trail">
+                          {i + 1}
+                        </span>
+                        <span className="truncate font-serif text-base text-ink">{label}</span>
+                      </div>
+                      <StopTagsEditor
+                        stop={stop}
+                        refresh={refresh}
+                        onSaveStatus={setSaveStatus}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
         </>
       )}
 

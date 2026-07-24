@@ -4,7 +4,8 @@
 // - Unauthenticated PAGE requests for `/` and `/trips/**` → redirect to /login.
 // - Unauthenticated owner `/api/**` requests → 401 JSON.
 // - Exempt (always allowed): /login, /api/auth/login, /api/auth/session,
-//   /health, /api/media/**.
+//   /health, /api/media/**, and (P2) /s/** (public reader pages) +
+//   /api/public/** (public read API).
 // - The `matcher` excludes Next internals and static assets so they never hit
 //   this function.
 
@@ -22,6 +23,14 @@ function isExempt(pathname: string): boolean {
   }
   // Public photo byte stream.
   if (pathname === "/api/media" || pathname.startsWith("/api/media/")) {
+    return true;
+  }
+  // (P2) Public read API — served without owner auth.
+  if (pathname === "/api/public" || pathname.startsWith("/api/public/")) {
+    return true;
+  }
+  // (P2) Public reader pages under the opaque share slug.
+  if (pathname === "/s" || pathname.startsWith("/s/")) {
     return true;
   }
   return false;
