@@ -90,7 +90,7 @@ async function seedTrip(page: Page): Promise<{ tripId: string; stopIds: string[]
   return { tripId, stopIds };
 }
 
-test("map overview renders a Leaflet map with a marker per located stop and a route line", async ({
+test("map hero renders a themed Leaflet map with a marker per located stop, a route line, and interactive pins", async ({
   page,
 }) => {
   const { tripId } = await seedTrip(page);
@@ -98,21 +98,13 @@ test("map overview renders a Leaflet map with a marker per located stop and a ro
   await page.goto(`/trips/${tripId}/story`);
   await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/story`));
 
-  // Every stop card is present before we touch the map.
-  const cards = page.locator("[data-stop-card]");
-  await expect(cards).toHaveCount(STOPS.length);
-
-  // No map yet — the overlay/panel is closed by default.
-  await expect(page.locator(".leaflet-container")).toHaveCount(0);
-
-  // Toggle Map overview on.
-  const toggle = page.locator("[data-map-toggle]");
-  await expect(toggle).toBeEnabled();
-  await toggle.click();
-
-  // A real Leaflet map mounts (dynamically imported, client-only).
+  // The map hero is ALWAYS on at the top of the story (no toggle) and mounts a
+  // real Leaflet map (dynamically imported, client-only).
   const map = page.locator(".leaflet-container");
   await expect(map).toBeVisible({ timeout: 15_000 });
+
+  // Every stop card renders below the map.
+  await expect(page.locator("[data-stop-card]")).toHaveCount(STOPS.length);
 
   // One marker per located stop (all three stops carry coords).
   await expect(page.locator(".leaflet-marker-icon")).toHaveCount(STOPS.length);
@@ -129,9 +121,7 @@ test("map overview renders a Leaflet map with a marker per located stop and a ro
   await expect(page.locator(".leaflet-popup")).toBeVisible();
   await expect(page.locator("[data-map-goto]")).toHaveCount(1);
 
-  // Toggling back removes the map and restores the serpentine story.
-  await toggle.click();
-  await expect(page.locator(".leaflet-container")).toHaveCount(0);
+  // The serpentine story renders below the map hero.
   await expect(page.locator("svg path[data-serpentine]")).toHaveCount(1);
 });
 

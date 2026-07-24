@@ -14,6 +14,7 @@
 import dynamic from "next/dynamic";
 import type { Trip } from "@/lib/api-client";
 import type { MapPoint } from "./TripLeafletMap";
+import type { MapTileStyle } from "./mapStyle";
 
 const TripLeafletMap = dynamic(() => import("./TripLeafletMap"), {
   ssr: false,
@@ -28,12 +29,18 @@ export function MapOverview({
   trip,
   accent,
   onSelect,
+  tileStyle,
+  height,
 }: {
   trip: Trip;
   /** Active theme accent for pins + route line. */
   accent?: string;
   /** Called with a stop id when a pin/popup is clicked (jump to that stop). */
   onSelect?: (stopId: string) => void;
+  /** Per-theme tile source + optional CSS tint. */
+  tileStyle?: MapTileStyle;
+  /** Map height in px. */
+  height?: number;
 }) {
   // Keep only stops with real coordinates, in journey order (stops arrive
   // order-ascending from the API). Narrow lat/lng to non-null numbers.
@@ -70,5 +77,13 @@ export function MapOverview({
     );
   }
 
-  return <TripLeafletMap stops={points} accent={accent} onSelect={onSelect} />;
+  return (
+    <TripLeafletMap
+      stops={points}
+      accent={accent}
+      onSelect={onSelect}
+      tileStyle={tileStyle}
+      height={height}
+    />
+  );
 }

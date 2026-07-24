@@ -10,16 +10,16 @@
 // in the ACTIVE THEME's palette (dark for cinematic, kraft for vintage, …) so it
 // reads as part of the story rather than a bolted-on white panel.
 //
-// It owns only view-local state (map open, selected tags) over the already-loaded
-// trip — no refetch, no reload. The frozen story DOM hooks (`[data-serpentine]`,
-// `[data-stop-card]`, …), the `[data-map-toggle]`, and the tag-filter chips are
-// all preserved for the E2E.
+// It owns only view-local state (selected tags) over the already-loaded trip —
+// no refetch, no reload. The frozen story DOM hooks (`[data-serpentine]`,
+// `[data-stop-card]`, …) and the tag-filter chips are preserved for the E2E.
 
 import { useState } from "react";
 import type { Trip } from "@/lib/api-client";
 import { StoryView } from "./StoryView";
 import { getTheme } from "./themes";
 import { MapOverview } from "@/components/mapoverview/MapOverview";
+import { mapStyleForTheme } from "@/components/mapoverview/mapStyle";
 import { TagFilter } from "@/components/tags/TagFilter";
 
 /** Add alpha to a `#rgb`/`#rrggbb` color; pass through anything else unchanged. */
@@ -43,8 +43,11 @@ export function StoryReader({ trip }: { trip: Trip }) {
   const ground = (theme.rootStyle.backgroundColor as string | undefined) ?? "#faf6ee";
   const titleColor = (theme.headerTitleStyle?.color as string | undefined) ?? "#1c1917";
 
-  const [showMap, setShowMap] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
+  const tileStyle = mapStyleForTheme(trip.theme);
+  // The map hero is shown whenever at least one stop is located.
+  const hasLocatedStop = trip.stops.some((s) => s.lat != null && s.lng != null);
 
   // Clicking a map pin jumps the story to that stop. If a tag filter is hiding
   // the target, clear it first so the stop is in the DOM, then smooth-scroll it
@@ -72,48 +75,14 @@ export function StoryReader({ trip }: { trip: Trip }) {
 
   return (
     <div className="pb-24">
-      {/* Reader controls: a themed Map overview toggle, centered in the story column. */}
-      <div className="mx-auto mt-6 flex max-w-5xl items-center justify-center px-4">
-        <button
-          type="button"
-          data-map-toggle
-          aria-pressed={showMap}
-          onClick={() => setShowMap((v) => !v)}
-          title="Show or hide the map overview"
-          className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium shadow-sm transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-          style={
-            showMap
-              ? {
-                  backgroundColor: accent,
-                  color: ground,
-                  boxShadow: `0 2px 14px ${withAlpha(accent, 0.4)}`,
-                }
-              : {
-                  backgroundColor: withAlpha(titleColor, 0.06),
-                  color: titleColor,
-                  border: `1px solid ${withAlpha(titleColor, 0.18)}`,
-                }
-          }
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M9 20l-5.5 2.5V6L9 3.5m0 16.5l6 2.5m-6-2.5V3.5m6 19l5.5-2.5V6L15 3.5m0 19V3.5m0 0L9 6"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          {showMap ? "Hide map" : "Map overview"}
-        </button>
-      </div>
-
-      {/* Map overview — framed in the active theme's palette so it belongs to the
-          story. Always fed the FULL trip so every located stop is pinned. */}
-      {showMap && (
-        <section aria-label="Map overview" className="mx-auto mt-4 max-w-5xl px-4">
+      {/* Map hero — an always-on route map at the top of the story, framed and
+          tiled in the ACTIVE theme's palette so it opens the narrative rather
+          than sitting apart from it. Pins are interactive (click → jump to that
+          stop). Only shown when the trip has at least one located stop. */}
+      {hasLocatedStop && (
+        <section aria-label="Route map" className="mx-auto mt-6 max-w-5xl px-4">
           <div
-            className="isolate overflow-hidden rounded-2xl shadow-2xl"
+            className="isolate overflow-hidden rounded-2xl"
             style={{
               backgroundColor: ground,
               border: `1px solid ${withAlpha(accent, 0.35)}`,
@@ -121,11 +90,16 @@ export function StoryReader({ trip }: { trip: Trip }) {
             }}
           >
             <div
-              className="flex items-center justify-between gap-3 px-4 py-2.5"
+              className="flex items-center gap-3 px-4 py-2.5"
               style={{ borderBottom: `1px solid ${withAlpha(titleColor, 0.12)}` }}
             >
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: accent }}
+                aria-hidden="true"
+              />
               <h2 className="text-sm font-semibold" style={{ color: titleColor }}>
-                Map overview
+                Route map
               </h2>
               <span
                 className="h-1.5 flex-1 rounded-full"
@@ -137,22 +111,17 @@ export function StoryReader({ trip }: { trip: Trip }) {
                 }}
                 aria-hidden="true"
               />
-              <button
-                type="button"
-                onClick={() => setShowMap(false)}
-                className="rounded-full px-3 py-1 text-xs font-medium transition hover:brightness-125 focus:outline-none focus-visible:ring-2"
-                style={{ color: withAlpha(titleColor, 0.7) }}
-              >
-                Close
-              </button>
+              <span className="text-xs" style={{ color: withAlpha(titleColor, 0.6) }}>
+                Click a pin to jump to that stop
+              </span>
             </div>
-            <MapOverview trip={trip} accent={accent} onSelect={handleSelectStop} />
-            <p
-              className="px-4 py-2 text-center text-xs"
-              style={{ color: withAlpha(titleColor, 0.6) }}
-            >
-              Tip: click a pin to jump to that stop in the story.
-            </p>
+            <MapOverview
+              trip={trip}
+              accent={accent}
+              onSelect={handleSelectStop}
+              tileStyle={tileStyle}
+              height={360}
+            />
           </div>
         </section>
       )}

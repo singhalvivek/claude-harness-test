@@ -10,8 +10,14 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from "react-leaflet";
+import type { MapTileStyle } from "./mapStyle";
 
 const TRAIL = "hsl(18 62% 47%)"; // matches the `trail` Tailwind token (default accent).
+const DEFAULT_TILES: MapTileStyle = {
+  url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+};
 
 /** One located stop rendered as a numbered pin on the map. */
 export interface MapPoint {
@@ -41,6 +47,20 @@ function numberedIcon(order: number, accent: string): L.DivIcon {
   });
 }
 
+/** Apply a CSS filter to the TILE pane only (so markers/route stay un-tinted). */
+function TilePaneFilter({ filter }: { filter?: string }) {
+  const map = useMap();
+  useEffect(() => {
+    const pane = map.getPane("tilePane");
+    if (pane) pane.style.filter = filter ?? "";
+    return () => {
+      const p = map.getPane("tilePane");
+      if (p) p.style.filter = "";
+    };
+  }, [map, filter]);
+  return null;
+}
+
 /** Fit the map to show every located stop (or center on the sole one). */
 function FitToStops({ positions }: { positions: [number, number][] }) {
   const map = useMap();
@@ -62,12 +82,18 @@ export default function TripLeafletMap({
   stops,
   accent = TRAIL,
   onSelect,
+  tileStyle = DEFAULT_TILES,
+  height = 420,
 }: {
   stops: MapPoint[];
   /** Active theme accent for pins + route line. */
   accent?: string;
   /** Called with a stop id when its pin (or popup button) is clicked. */
   onSelect?: (stopId: string) => void;
+  /** Per-theme tile source + optional CSS tint. */
+  tileStyle?: MapTileStyle;
+  /** Map height in px. */
+  height?: number;
 }) {
   const positions = useMemo<[number, number][]>(
     () => stops.map((s) => [s.lat, s.lng]),
@@ -80,13 +106,11 @@ export default function TripLeafletMap({
       center={center}
       zoom={5}
       scrollWheelZoom
-      style={{ height: 420, width: "100%" }}
+      style={{ height, width: "100%" }}
       className="z-0"
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <TileLayer attribution={tileStyle.attribution} url={tileStyle.url} />
+      <TilePaneFilter filter={tileStyle.filter} />
 
       {/* The route line connects stops in their journey order, mirroring the
           serpentine sequence. (Needs >= 2 points to render an SVG path.) */}
