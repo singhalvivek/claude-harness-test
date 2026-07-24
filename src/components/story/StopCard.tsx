@@ -5,6 +5,7 @@ import { motion, useScroll, useTransform, AnimatePresence, type Variants } from 
 import type { Stop } from "@/lib/api-client";
 import { MotifGlyph, hasMotif } from "@/components/motifs/catalog";
 import { PhotoGallery } from "./PhotoGallery";
+import { withAlpha } from "./color";
 import type { CardTreatment } from "./themes";
 
 // One stop anchored along the serpentine path. It:
@@ -115,12 +116,22 @@ export function StopCard({ stop, side, top, reduce, card, accent }: StopCardProp
           className="absolute -top-[8%] left-0 h-[116%] w-full object-cover"
         />
       ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-black/10 to-black/20 text-black/40">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-            <path d="M21 15l-5-5L5 21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+          style={{
+            background: `linear-gradient(135deg, ${withAlpha(accent, 0.1)}, ${withAlpha(accent, 0.05)})`,
+            color: withAlpha(accent, 0.6),
+          }}
+        >
+          {hasMotif(stop.motif) ? (
+            <MotifGlyph motif={stop.motif} size={40} />
+          ) : (
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+              <path d="M21 15l-5-5L5 21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
           <span className="text-xs">No photo yet</span>
         </div>
       )}

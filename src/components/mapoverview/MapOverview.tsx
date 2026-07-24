@@ -31,6 +31,7 @@ export function MapOverview({
   onSelect,
   tileStyle,
   height,
+  ground,
 }: {
   trip: Trip;
   /** Active theme accent for pins + route line. */
@@ -41,6 +42,8 @@ export function MapOverview({
   tileStyle?: MapTileStyle;
   /** Map height in px. */
   height?: number;
+  /** Theme ground — fills the map before tiles load. */
+  ground?: string;
 }) {
   // Keep only stops with real coordinates, in journey order (stops arrive
   // order-ascending from the API). Narrow lat/lng to non-null numbers.
@@ -84,6 +87,7 @@ export function MapOverview({
       onSelect={onSelect}
       tileStyle={tileStyle}
       height={height}
+      ground={ground}
     />
   );
 }

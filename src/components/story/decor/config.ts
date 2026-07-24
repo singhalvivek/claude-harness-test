@@ -1,17 +1,20 @@
-// Per-theme ambient decor recipe. A tiny data module (no JSX) that describes the
-// handful of decorative sprites drifting behind each theme's story — cinematic
-// warm light orbs/bokeh, vintage paper scraps + postage stamps + dotted marks,
-// editorial ink flourishes + leaf shapes, minimal quiet floating geometry.
+// Per-theme ambient decor recipe. A data module (no JSX) that describes the
+// decorative sprites drifting behind each theme's story — cinematic warm light
+// orbs/bokeh + faint star specks, vintage paper scraps + postage stamps + dotted
+// marks, editorial ink flourishes + leaves + dots, minimal quiet geometry.
 //
-// `AmbientDecor` reads this and renders each sprite low-opacity, pointer-events
-// none, BEHIND the path + cards, drifting with subtle scroll parallax (static
-// under reduced-motion). Kept to ~8–10 elements per theme for performance.
+// Sprites are generated DENSELY and DETERMINISTICALLY (a seeded hash of the
+// index — same on server + client, so no hydration mismatch and no use of
+// Date/Math.random) and spread across the full story height so the margins on
+// both sides of the serpentine feel curated and lived-in rather than blank.
+// `AmbientDecor` renders each one low-opacity, pointer-events none, BEHIND the
+// path + cards, drifting with subtle scroll parallax (static under reduced-motion).
 
 import type { StoryTheme } from "@/lib/api-client";
 
 export type DecorKind =
   | "orb" // soft radial glow disc (cinematic)
-  | "dot" // small filled dot (vintage / minimal)
+  | "dot" // small filled dot (star speck / vintage dot / minimal)
   | "ring" // hollow circle (minimal)
   | "square" // rotated hollow square (minimal)
   | "plus" // small plus / cross mark (minimal)
@@ -31,7 +34,7 @@ export interface DecorSprite {
   size: number;
   /** Parallax band: 0 = far/slow, 1 = mid, 2 = near/fast. */
   depth: 0 | 1 | 2;
-  /** Element opacity (kept low so legibility is never harmed). */
+  /** Element opacity (kept modest so legibility is never harmed). */
   opacity: number;
   /** Static rotation (deg). */
   rotate?: number;
@@ -40,68 +43,125 @@ export interface DecorSprite {
 }
 
 export interface DecorPalette {
-  /** Theme accent (marker color). */
   accent: string;
-  /** Theme ink / heading color. */
   ink: string;
-  /** Theme ground background color. */
   ground: string;
 }
 
+/** Deterministic 0..1 pseudo-random from an index + salt (SSR-safe). */
+function seeded(i: number, salt: number): number {
+  const x = Math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+interface KindSpec {
+  kind: DecorKind;
+  /** Weight in the mix. */
+  w: number;
+  sizeMin: number;
+  sizeMax: number;
+  opMin: number;
+  opMax: number;
+  /** 0 → accent, 1 → ink, 2 → alternate by index. */
+  color: 0 | 1 | 2;
+}
+
+interface Recipe {
+  count: number;
+  specs: KindSpec[];
+}
+
+const RECIPES: Record<StoryTheme, Recipe> = {
+  cinematic: {
+    count: 34,
+    specs: [
+      { kind: "orb", w: 5, sizeMin: 70, sizeMax: 260, opMin: 0.1, opMax: 0.2, color: 0 },
+      { kind: "dot", w: 6, sizeMin: 3, sizeMax: 7, opMin: 0.35, opMax: 0.75, color: 0 }, // star specks
+    ],
+  },
+  vintage: {
+    count: 30,
+    specs: [
+      { kind: "scrap", w: 3, sizeMin: 44, sizeMax: 96, opMin: 0.26, opMax: 0.46, color: 2 },
+      { kind: "stamp", w: 2, sizeMin: 40, sizeMax: 66, opMin: 0.3, opMax: 0.5, color: 0 },
+      { kind: "dot", w: 3, sizeMin: 6, sizeMax: 14, opMin: 0.32, opMax: 0.5, color: 2 },
+      { kind: "plus", w: 1, sizeMin: 16, sizeMax: 26, opMin: 0.3, opMax: 0.45, color: 1 },
+    ],
+  },
+  editorial: {
+    count: 28,
+    specs: [
+      { kind: "leaf", w: 3, sizeMin: 44, sizeMax: 84, opMin: 0.16, opMax: 0.3, color: 2 },
+      { kind: "flourish", w: 2, sizeMin: 90, sizeMax: 150, opMin: 0.14, opMax: 0.26, color: 2 },
+      { kind: "dot", w: 3, sizeMin: 5, sizeMax: 11, opMin: 0.2, opMax: 0.4, color: 2 },
+    ],
+  },
+  minimal: {
+    count: 30,
+    specs: [
+      { kind: "ring", w: 3, sizeMin: 30, sizeMax: 66, opMin: 0.32, opMax: 0.5, color: 2 },
+      { kind: "square", w: 2, sizeMin: 30, sizeMax: 56, opMin: 0.3, opMax: 0.48, color: 2 },
+      { kind: "plus", w: 2, sizeMin: 20, sizeMax: 34, opMin: 0.32, opMax: 0.5, color: 2 },
+      { kind: "dot", w: 3, sizeMin: 5, sizeMax: 12, opMin: 0.3, opMax: 0.5, color: 1 },
+    ],
+  },
+};
+
+/** Pick a kind spec by the weighted mix using a 0..1 roll. */
+function pickSpec(specs: KindSpec[], roll: number): KindSpec {
+  const total = specs.reduce((s, k) => s + k.w, 0);
+  let acc = roll * total;
+  for (const s of specs) {
+    acc -= s.w;
+    if (acc <= 0) return s;
+  }
+  return specs[specs.length - 1];
+}
+
 /**
- * The decorative sprite set for a theme, resolved against its live palette.
- * Positions are spread down the full story height so the empty margins on both
- * sides of the serpentine feel lived-in rather than blank.
+ * The decorative sprite set for a theme, resolved against its live palette and
+ * spread densely down the full story height (both margins) so the space feels
+ * curated. Deterministic → identical on server and client.
  */
 export function getDecor(theme: StoryTheme, p: DecorPalette): DecorSprite[] {
-  switch (theme) {
-    case "cinematic":
-      // Warm light orbs / bokeh, all in the amber accent, drifting slowly.
-      return [
-        { id: "c1", kind: "orb", left: 8, top: 6, size: 220, depth: 0, opacity: 0.16, color: p.accent },
-        { id: "c2", kind: "orb", left: 82, top: 12, size: 150, depth: 2, opacity: 0.14, color: p.accent },
-        { id: "c3", kind: "orb", left: 68, top: 30, size: 90, depth: 1, opacity: 0.18, color: p.accent },
-        { id: "c4", kind: "orb", left: 14, top: 44, size: 120, depth: 2, opacity: 0.13, color: p.accent },
-        { id: "c5", kind: "orb", left: 88, top: 58, size: 200, depth: 0, opacity: 0.12, color: p.accent },
-        { id: "c6", kind: "orb", left: 6, top: 70, size: 80, depth: 1, opacity: 0.2, color: p.accent },
-        { id: "c7", kind: "orb", left: 74, top: 82, size: 160, depth: 2, opacity: 0.13, color: p.accent },
-        { id: "c8", kind: "orb", left: 22, top: 92, size: 110, depth: 1, opacity: 0.15, color: p.accent },
-      ];
-    case "vintage":
-      // Faint paper scraps, postage stamps and dotted marks in ink brown.
-      return [
-        { id: "v1", kind: "scrap", left: 6, top: 8, size: 66, depth: 1, opacity: 0.22, rotate: -8, color: p.ink },
-        { id: "v2", kind: "stamp", left: 84, top: 14, size: 52, depth: 2, opacity: 0.26, rotate: 6, color: p.accent },
-        { id: "v3", kind: "dot", left: 72, top: 26, size: 10, depth: 0, opacity: 0.32, color: p.ink },
-        { id: "v4", kind: "scrap", left: 88, top: 40, size: 54, depth: 0, opacity: 0.2, rotate: 7, color: p.ink },
-        { id: "v5", kind: "dot", left: 12, top: 50, size: 8, depth: 2, opacity: 0.34, color: p.accent },
-        { id: "v6", kind: "stamp", left: 8, top: 64, size: 46, depth: 1, opacity: 0.24, rotate: -5, color: p.ink },
-        { id: "v7", kind: "dot", left: 80, top: 72, size: 12, depth: 1, opacity: 0.3, color: p.ink },
-        { id: "v8", kind: "scrap", left: 20, top: 86, size: 60, depth: 2, opacity: 0.2, rotate: 5, color: p.accent },
-      ];
-    case "editorial":
-      // Light ink flourishes + leaf shapes in the terracotta accent / brown ink.
-      return [
-        { id: "e1", kind: "leaf", left: 7, top: 9, size: 68, depth: 1, opacity: 0.18, rotate: -18, color: p.accent },
-        { id: "e2", kind: "flourish", left: 80, top: 16, size: 130, depth: 2, opacity: 0.16, rotate: 8, color: p.accent },
-        { id: "e3", kind: "leaf", left: 86, top: 36, size: 56, depth: 0, opacity: 0.16, rotate: 24, color: p.ink },
-        { id: "e4", kind: "flourish", left: 10, top: 48, size: 120, depth: 2, opacity: 0.14, rotate: -10, color: p.ink },
-        { id: "e5", kind: "leaf", left: 74, top: 62, size: 62, depth: 1, opacity: 0.18, rotate: -30, color: p.accent },
-        { id: "e6", kind: "flourish", left: 12, top: 74, size: 110, depth: 0, opacity: 0.15, rotate: 12, color: p.accent },
-        { id: "e7", kind: "leaf", left: 84, top: 88, size: 58, depth: 2, opacity: 0.16, rotate: 16, color: p.ink },
-      ];
-    case "minimal":
-    default:
-      // Quiet floating geometric marks in slate.
-      return [
-        { id: "m1", kind: "ring", left: 9, top: 8, size: 64, depth: 1, opacity: 0.5, color: p.accent },
-        { id: "m2", kind: "square", left: 82, top: 15, size: 44, depth: 2, opacity: 0.45, rotate: 12, color: p.ink },
-        { id: "m3", kind: "plus", left: 70, top: 30, size: 30, depth: 0, opacity: 0.5, color: p.accent },
-        { id: "m4", kind: "ring", left: 88, top: 46, size: 40, depth: 2, opacity: 0.45, color: p.ink },
-        { id: "m5", kind: "plus", left: 12, top: 54, size: 26, depth: 1, opacity: 0.5, color: p.ink },
-        { id: "m6", kind: "square", left: 8, top: 70, size: 52, depth: 0, opacity: 0.4, rotate: -8, color: p.accent },
-        { id: "m7", kind: "ring", left: 78, top: 80, size: 56, depth: 1, opacity: 0.45, color: p.accent },
-        { id: "m8", kind: "plus", left: 24, top: 90, size: 28, depth: 2, opacity: 0.5, color: p.ink },
-      ];
+  const recipe = RECIPES[theme] ?? RECIPES.minimal;
+  const out: DecorSprite[] = [];
+  const n = recipe.count;
+
+  for (let i = 0; i < n; i++) {
+    const r1 = seeded(i, 1);
+    const r2 = seeded(i, 2);
+    const r3 = seeded(i, 3);
+    const r4 = seeded(i, 4);
+    const r5 = seeded(i, 5);
+    const spec = pickSpec(recipe.specs, r1);
+
+    // Even vertical distribution across the full height, with gentle jitter.
+    const band = 100 / n;
+    const top = Math.min(99, Math.max(1, (i + 0.5) * band + (r2 - 0.5) * band * 0.9));
+
+    // Bias horizontally toward the side margins (where the empty space lives),
+    // but allow the full width; decor behind an opaque card is simply hidden.
+    const edge = r3 < 0.5;
+    const left = edge ? 1 + r4 * 26 : 73 + r4 * 26;
+
+    const size = Math.round(spec.sizeMin + r5 * (spec.sizeMax - spec.sizeMin));
+    const opacity = +(spec.opMin + seeded(i, 6) * (spec.opMax - spec.opMin)).toFixed(3);
+    const color = spec.color === 0 ? p.accent : spec.color === 1 ? p.ink : i % 2 === 0 ? p.accent : p.ink;
+    const rotate = Math.round((seeded(i, 7) - 0.5) * 40);
+
+    out.push({
+      id: `${theme}-${i}`,
+      kind: spec.kind,
+      left: +left.toFixed(2),
+      top: +top.toFixed(2),
+      size,
+      depth: (i % 3) as 0 | 1 | 2,
+      opacity,
+      rotate,
+      color,
+    });
   }
+
+  return out;
 }

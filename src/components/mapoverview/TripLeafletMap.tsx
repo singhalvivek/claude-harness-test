@@ -84,6 +84,7 @@ export default function TripLeafletMap({
   onSelect,
   tileStyle = DEFAULT_TILES,
   height = 420,
+  ground = "#e5e3df",
 }: {
   stops: MapPoint[];
   /** Active theme accent for pins + route line. */
@@ -94,6 +95,8 @@ export default function TripLeafletMap({
   tileStyle?: MapTileStyle;
   /** Map height in px. */
   height?: number;
+  /** Theme ground — fills the map before/if tiles are slow to load (no dead grey). */
+  ground?: string;
 }) {
   const positions = useMemo<[number, number][]>(
     () => stops.map((s) => [s.lat, s.lng]),
@@ -106,7 +109,7 @@ export default function TripLeafletMap({
       center={center}
       zoom={5}
       scrollWheelZoom
-      style={{ height, width: "100%" }}
+      style={{ height, width: "100%", backgroundColor: ground }}
       className="z-0"
     >
       <TileLayer attribution={tileStyle.attribution} url={tileStyle.url} />

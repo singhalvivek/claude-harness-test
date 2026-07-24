@@ -107,6 +107,7 @@ export function StoryReader({ trip }: { trip: Trip }) {
               onSelect={handleSelectStop}
               tileStyle={tileStyle}
               height={360}
+              ground={ground}
             />
           </div>
         </section>
