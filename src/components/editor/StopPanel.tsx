@@ -8,6 +8,8 @@ import { ComingSoonPill } from "@/components/ui/Pill";
 import { getErrorMessage } from "@/components/ui/errors";
 import { LocationPicker, type LocationValue } from "@/components/map/LocationPicker";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
+import { MotifPicker } from "@/components/editor/MotifPicker";
+import { type SaveStatus } from "@/components/editor/TripHeader";
 import { fromDateTimeLocal, toDateTimeLocal } from "./format";
 
 /**
@@ -63,6 +65,14 @@ export function StopPanel({
       setError(getErrorMessage(err, "Could not save this stop."));
       setSaving(false);
     }
+  }
+
+  // The motif live-saves on click (like ThemePicker); it doesn't ride the
+  // explicit Save. Surface only its failures through the drawer's shared error
+  // slot — the panel has no live "Saved ✓" indicator of its own.
+  function handleMotifSaveStatus(status: SaveStatus) {
+    if (status === "saving") setError(null);
+    else if (status === "error") setError("Could not update the motif for this stop.");
   }
 
   async function handleCancel() {
@@ -148,6 +158,16 @@ export function StopPanel({
             placeholder="Write about this stop… (plain text for now)"
             className="w-full resize-y rounded-md border border-ink/20 px-3 py-2 text-sm outline-none focus:border-trail"
           />
+        </section>
+
+        <section>
+          <p className="mb-0.5 text-sm font-medium text-ink">
+            Motif <span className="font-normal text-ink/40">(optional)</span>
+          </p>
+          <p className="mb-2 text-xs text-ink/50">
+            A little symbol for this stop&rsquo;s story ornament.
+          </p>
+          <MotifPicker stop={stop} refresh={refresh} onSaveStatus={handleMotifSaveStatus} />
         </section>
 
         <section>

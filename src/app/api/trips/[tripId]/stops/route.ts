@@ -7,6 +7,7 @@ import type { Stop } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
+import { MOTIF_IDS } from "@/lib/api-client";
 
 const createSchema = z.object({
   title: z.string().optional(),
@@ -16,6 +17,8 @@ const createSchema = z.object({
   locationPrecision: z.enum(["exact", "approximate", "none"]).optional(),
   occurredAt: z.string().datetime({ offset: true }).nullable().optional(),
   body: z.string().optional(),
+  // Unknown motif → zod parse fails → 400. Omitted → DB default "none".
+  motif: z.enum(MOTIF_IDS).optional(),
 });
 
 function serializeNewStop(s: Stop) {
@@ -29,6 +32,7 @@ function serializeNewStop(s: Stop) {
     locationPrecision: s.locationPrecision,
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
+    motif: s.motif,
     tags: [] as never[],
     photos: [] as never[],
   };
@@ -75,6 +79,8 @@ async function handlePost(
       locationPrecision: d.locationPrecision,
       occurredAt: d.occurredAt ? new Date(d.occurredAt) : undefined,
       body: d.body,
+      // undefined → Prisma applies the column default "none".
+      motif: d.motif ?? undefined,
     },
   });
 

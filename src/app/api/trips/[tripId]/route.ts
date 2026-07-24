@@ -45,6 +45,7 @@ function serializeStop(s: StopWithRelations) {
     locationPrecision: s.locationPrecision,
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
+    motif: s.motif,
     tags: s.tags.map(serializeTag),
     photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializePhoto),
   };

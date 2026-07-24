@@ -85,6 +85,8 @@ async function seedTrip(page: Page, opts?: { theme?: string }): Promise<string> 
         locationPrecision: "exact",
         occurredAt: new Date(Date.UTC(2026, 4, 1 + i, 9 + i, 30)).toISOString(),
         body: s.body,
+        // Give the first stop a motif so the decorated "station" ornament renders.
+        ...(i === 0 ? { motif: "mountain" } : {}),
       },
     });
     expect(stopRes.status(), await stopRes.text()).toBe(201);
@@ -311,4 +313,83 @@ test("all four themes render their data-theme value, signature and serpentine", 
       `theme=${theme}: root has a filled background`,
     ).toBeFalsy();
   }
+});
+
+test("story decor: ambient background, per-stop motif ornament and closing outro render (frozen contract intact)", async ({
+  page,
+}) => {
+  // seedTrip gives the FIRST stop a "mountain" motif (see the seed helper).
+  const tripId = await seedTrip(page);
+
+  await page.goto(`/trips/${tripId}/story`);
+  await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/story`));
+
+  // --- Frozen hooks survive the added decoration ---
+  const path$ = page.locator("svg path[data-serpentine]");
+  await expect(path$).toHaveCount(1);
+  await expect(page.locator('[data-theme="cinematic"]')).toHaveCount(1);
+  await expect(page.locator("[data-theme-signature]").first()).toBeVisible();
+
+  // Path measured (draw-on-scroll contract holds: dashoffset == full at the top).
+  await expect
+    .poll(async () => path$.evaluate((el) => parseFloat(getComputedStyle(el).strokeDashoffset) || 0), {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(50);
+
+  // The cover photo is still real + hero-scale (> 340px), never a thumbnail.
+  const cover = page.locator("[data-cover-photo]").first();
+  await expect
+    .poll(async () => cover.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 15_000 })
+    .toBeGreaterThan(0);
+  const coverBox = await cover.boundingBox();
+  expect(coverBox?.width ?? 0).toBeGreaterThan(340);
+
+  // --- (2) Ambient decorated background layer is present and full-bleed ---
+  const decor = page.locator("[data-ambient-decor]");
+  await expect(decor).toHaveCount(1);
+  await expect(decor).toBeVisible();
+  const decorBox = await decor.boundingBox();
+  expect(decorBox?.width ?? 0).toBeGreaterThan(340);
+
+  // --- (1) A motif ornament renders for the motif'd stop and animates in ---
+  const ornament = page.locator('[data-stop-motif="mountain"]');
+  await expect(ornament).toHaveCount(1);
+  // It scale+fades in when scrolled into view (the always-on map hero pushes the
+  // first node below the fold, so bring it into view first).
+  await ornament.scrollIntoViewIfNeeded();
+  await expect
+    .poll(async () => ornament.evaluate((el) => parseFloat(getComputedStyle(el).opacity)), {
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(0.5);
+  // The catalog glyph actually rendered inside the ornament.
+  await expect(ornament.locator("svg")).toHaveCount(1);
+
+  // A stop card still starts hidden and animates in on scroll (frozen behavior).
+  const lastCard = page.locator("[data-stop-card]").last();
+  const lastCardOpacityTop = await lastCard.evaluate((el) => parseFloat(getComputedStyle(el).opacity));
+  expect(lastCardOpacityTop).toBeLessThan(0.5);
+
+  const dashTop = await path$.evaluate((el) => parseFloat(getComputedStyle(el).strokeDashoffset));
+
+  // --- Scroll to the end → the path draws, the closing outro reveals ---
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(800);
+
+  const dashBottom = await path$.evaluate((el) => parseFloat(getComputedStyle(el).strokeDashoffset));
+  expect(dashBottom).toBeLessThan(dashTop);
+  expect(Math.abs(dashTop - dashBottom)).toBeGreaterThan(1);
+
+  await expect(lastCard).toBeVisible();
+
+  // --- (3) The closing "end of the journey" block renders after the last stop ---
+  const outro = page.locator("[data-story-outro]");
+  await expect(outro).toHaveCount(1);
+  await expect
+    .poll(async () => outro.evaluate((el) => parseFloat(getComputedStyle(el).opacity)), {
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(0.5);
+  await expect(outro).toContainText("The journey ends here");
 });

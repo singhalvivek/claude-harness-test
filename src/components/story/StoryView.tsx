@@ -15,9 +15,14 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import type { Trip } from "@/lib/api-client";
+import { hasMotif } from "@/components/motifs/catalog";
 import { StopCard } from "./StopCard";
 import { buildGeometry, serpentinePathD, nodeAnchors } from "./serpentine";
 import { getTheme } from "./themes";
+import { AmbientDecor } from "./AmbientDecor";
+import { StopMotifOrnament } from "./StopMotifOrnament";
+import { StoryIntro } from "./StoryIntro";
+import { StoryOutro } from "./StoryOutro";
 
 // useLayoutEffect on the client, useEffect on the server (avoids the SSR
 // warning). Measuring the path before paint prevents a full-drawn flash.
@@ -31,6 +36,11 @@ export function StoryView({ trip }: { trip: Trip }) {
 
   // Resolve the trip's theme (unknown / missing → cinematic).
   const theme = getTheme(trip.theme);
+  // Themed palette shared by the decorative layers (ambient decor, motif
+  // ornaments, intro/outro flourishes).
+  const accent = theme.marker.color;
+  const ground = (theme.rootStyle.backgroundColor as string | undefined) ?? "#faf6ee";
+  const ink = (theme.headerTitleStyle?.color as string | undefined) ?? "#1c1917";
 
   const [width, setWidth] = useState(1024);
   const [pathLen, setPathLen] = useState(0);
@@ -39,6 +49,10 @@ export function StoryView({ trip }: { trip: Trip }) {
   const geom = buildGeometry(width, stops.length, theme.segmentHeight);
   const d = serpentinePathD(geom);
   const anchors = nodeAnchors(geom);
+
+  // Crown the closing block with the last motif'd stop's motif (a personal
+  // touch), falling back to a star flourish when no stop carries a motif.
+  const lastMotif = [...stops].reverse().find((s) => hasMotif(s.motif))?.motif ?? "star";
 
   // Measure the track width (responsive) and re-measure on resize.
   useIsoLayoutEffect(() => {
@@ -125,6 +139,11 @@ export function StoryView({ trip }: { trip: Trip }) {
         style={theme.signatureStyle}
       />
 
+      {/* Ambient decorated background — a theme-aware decorative layer that fills
+          the empty margins and drifts with subtle scroll parallax, BEHIND the
+          path + cards. Static under reduced motion. */}
+      <AmbientDecor theme={theme.id} accent={accent} ink={ink} ground={ground} />
+
       <div
         ref={trackRef}
         className="relative z-10 mx-auto w-full max-w-5xl px-4"
@@ -163,22 +182,20 @@ export function StoryView({ trip }: { trip: Trip }) {
           />
         </svg>
 
-        {/* Story header over the first stretch of the path. */}
+        {/* Story header over the first stretch of the path — a warm, themed
+            "welcome" intro. Rendered inside the reserved header height so the
+            path measurement is unchanged. */}
         <header
           className="pointer-events-none absolute left-1/2 top-0 z-10 w-full max-w-3xl -translate-x-1/2 px-6 pt-20 text-center"
           style={{ height: geom.headerHeight }}
         >
-          <h1 className={theme.headerTitleClassName} style={theme.headerTitleStyle}>
-            {trip.title}
-          </h1>
-          {trip.description && (
-            <p className={theme.headerDescClassName} style={theme.headerDescStyle}>
-              {trip.description}
-            </p>
-          )}
-          <p className={theme.headerKickerClassName} style={theme.headerKickerStyle}>
-            Scroll to follow the journey
-          </p>
+          <StoryIntro
+            theme={theme}
+            title={trip.title}
+            description={trip.description}
+            stopCount={stops.length}
+            accent={accent}
+          />
         </header>
 
         {/* Traveling marker — travels the route as scroll advances. */}
@@ -212,10 +229,36 @@ export function StoryView({ trip }: { trip: Trip }) {
               top={anchor.cy}
               reduce={reduce}
               card={theme.card}
+              accent={accent}
             />
           );
         })}
+
+        {/* Per-stop motif ornaments — decorated "stations" pinned on the path at
+            each motif'd node. Skipped for stops with no motif. */}
+        {stops.map((stop, i) =>
+          hasMotif(stop.motif) ? (
+            <StopMotifOrnament
+              key={`motif-${stop.id}`}
+              motif={stop.motif}
+              cx={anchors[i].cx}
+              cy={anchors[i].cy}
+              accent={accent}
+              ground={ground}
+            />
+          ) : null,
+        )}
       </div>
+
+      {/* Closing moment — a themed "end of the journey" block after the track,
+          just past where the serpentine terminates. */}
+      <StoryOutro
+        theme={theme}
+        title={trip.title}
+        motif={lastMotif}
+        accent={accent}
+        ground={ground}
+      />
     </div>
   );
 }

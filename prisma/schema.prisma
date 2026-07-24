@@ -41,6 +41,10 @@ model Stop {
   locationPrecision String    @default("none")
   occurredAt        DateTime?
   body              String?
+  // Per-stop decorative motif rendered as an animated ornament on the serpentine
+  // + a card accent. One of: none (default) | flower | mountain | tree | train |
+  // plane | boat | car | tent | camera | star | compass | sun | heart.
+  motif             String    @default("none")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
+import { MOTIF_IDS } from "@/lib/api-client";
 
 type StopWithPhotos = Stop & { photos: Photo[] };
 
@@ -35,6 +36,7 @@ function serializeStop(s: StopWithPhotos) {
     locationPrecision: s.locationPrecision,
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
+    motif: s.motif,
     tags: [] as never[],
     photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializePhoto),
   };
@@ -48,6 +50,8 @@ const patchSchema = z.object({
   locationPrecision: z.enum(["exact", "approximate", "none"]).optional(),
   occurredAt: z.string().datetime({ offset: true }).nullable().optional(),
   body: z.string().nullable().optional(),
+  // Unknown motif → zod parse fails → 400. Persisted only when present.
+  motif: z.enum(MOTIF_IDS).optional(),
 });
 
 async function handlePatch(
@@ -81,6 +85,7 @@ async function handlePatch(
     data.occurredAt = d.occurredAt ? new Date(d.occurredAt) : null;
   }
   if (d.body !== undefined) data.body = d.body;
+  if (d.motif !== undefined) data.motif = d.motif;
 
   if (Object.keys(data).length > 0) {
     await prisma.stop.update({ where: { id: stopId }, data });

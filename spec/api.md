@@ -43,6 +43,7 @@ Conventions: 200 OK, 201 Created, 204 No Content; 400 invalid body (zod), 401 un
       "id": "…", "order": 0, "title": "…", "placeName": "Kyoto, Japan",
       "lat": 35.01, "lng": 135.76, "locationPrecision": "exact",
       "occurredAt": "2026-05-01T09:30:00.000Z", "body": "…",
+      "motif": "none",
       "tags": [],
       "photos": [
         { "id": "…", "order": 0, "isCover": true,
@@ -64,11 +65,13 @@ Cascades stops + photos and deletes all photo files via `storage.delete`. **Resp
 
 ## Stops
 
+> **`StopMotif`** — the per-stop decorative motif, one of `"none" | "flower" | "mountain" | "tree" | "train" | "plane" | "boat" | "car" | "tent" | "camera" | "star" | "compass" | "sun" | "heart"` (default `"none"`). Exported (with `MOTIF_IDS`) from `src/lib/api-client.ts`. Returned on **every** stop (owner trip GET, public trip GET, stop create/patch); accepted (optional) on stop create/patch and **validated with a `zod` enum** — an unknown value returns **400** and is never persisted. Backing column: `Stop.motif` (`data.md`); render contract: [`capabilities/story-decor.md`](capabilities/story-decor.md).
+
 ### `POST /api/trips/:tripId/stops` *(owner)*
-**Request (all optional except implied):** `{ "title"?, "placeName"?, "lat"?, "lng"?, "locationPrecision"?: "exact"|"approximate"|"none", "occurredAt"?: ISO8601, "body"? }`. Server assigns `order = max(order)+1`. **Response 201:** the created `Stop` (with empty `photos`).
+**Request (all optional except implied):** `{ "title"?, "placeName"?, "lat"?, "lng"?, "locationPrecision"?: "exact"|"approximate"|"none", "occurredAt"?: ISO8601, "body"?, "motif"?: StopMotif }`. Server assigns `order = max(order)+1`. `motif` is optional and defaults to `"none"` (DB default) when omitted; a supplied value is zod-enum-validated. **Response 201:** the created `Stop` (with empty `photos`, including `motif`). **Errors:** 400 unknown `motif` value.
 
 ### `PATCH /api/stops/:stopId` *(owner)*
-**Request (any subset of stop fields).** **Response 200:** updated `Stop`. Non-destructive.
+**Request (any subset of stop fields, including `motif`?: StopMotif).** **Response 200:** updated `Stop` (including `motif`). Non-destructive. **Errors:** 400 unknown `motif` value.
 
 ### `DELETE /api/stops/:stopId` *(owner)*
 Cascades photos (+ files). **Response 204.**

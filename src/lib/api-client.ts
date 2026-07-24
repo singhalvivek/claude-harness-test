@@ -12,6 +12,28 @@ export type LocationPrecision = "exact" | "approximate" | "none";
 // Per-trip story look (see spec/capabilities/story-themes.md). Default "cinematic".
 export type StoryTheme = "cinematic" | "editorial" | "minimal" | "vintage";
 
+// Per-stop decorative motif — the frozen enum, in canonical picker order.
+// Rendered as an animated ornament on the serpentine + a card accent, theme-colored.
+// See spec/capabilities/story-decor.md. Default "none".
+export const MOTIF_IDS = [
+  "none",
+  "flower",
+  "mountain",
+  "tree",
+  "train",
+  "plane",
+  "boat",
+  "car",
+  "tent",
+  "camera",
+  "star",
+  "compass",
+  "sun",
+  "heart",
+] as const;
+
+export type StopMotif = (typeof MOTIF_IDS)[number];
+
 export interface Tag {
   id: string;
   label: string;
@@ -39,6 +61,7 @@ export interface Stop {
   locationPrecision: LocationPrecision;
   occurredAt: string | null; // ISO 8601
   body: string | null;
+  motif: StopMotif; // decorative motif; "none" by default
   tags: Tag[]; // always [] in Phase 1
   photos: Photo[];
 }
@@ -100,6 +123,7 @@ export interface StopInput {
   locationPrecision?: LocationPrecision;
   occurredAt?: string | null; // ISO 8601
   body?: string;
+  motif?: StopMotif; // omitted → DB default "none"
 }
 
 export type StopPatch = StopInput;

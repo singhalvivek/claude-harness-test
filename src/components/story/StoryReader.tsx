@@ -18,24 +18,10 @@ import { useState } from "react";
 import type { Trip } from "@/lib/api-client";
 import { StoryView } from "./StoryView";
 import { getTheme } from "./themes";
+import { withAlpha } from "./color";
 import { MapOverview } from "@/components/mapoverview/MapOverview";
 import { mapStyleForTheme } from "@/components/mapoverview/mapStyle";
 import { TagFilter } from "@/components/tags/TagFilter";
-
-/** Add alpha to a `#rgb`/`#rrggbb` color; pass through anything else unchanged. */
-function withAlpha(color: string, a: number): string {
-  const six = /^#([0-9a-f]{6})$/i.exec(color);
-  if (six) {
-    const n = parseInt(six[1], 16);
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-  }
-  const three = /^#([0-9a-f]{3})$/i.exec(color);
-  if (three) {
-    const [r, g, b] = three[1].split("").map((c) => parseInt(c + c, 16));
-    return `rgba(${r}, ${g}, ${b}, ${a})`;
-  }
-  return color;
-}
 
 export function StoryReader({ trip }: { trip: Trip }) {
   const theme = getTheme(trip.theme);

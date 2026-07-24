@@ -45,6 +45,7 @@ function serializeStop(s: StopWithRelations) {
     locationPrecision: s.locationPrecision,
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
+    motif: s.motif,
     tags: (s.tags ?? []).map(({ tag }) => ({
       id: tag.id,
       label: tag.label,

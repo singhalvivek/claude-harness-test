@@ -48,12 +48,15 @@ One point on the journey: a location, a moment, media, and an entry.
 | locationPrecision | String @default("none") | yes | `exact` (search/manual coords) · `approximate` (map-click/reverse) · `none` (text-only fallback) |
 | occurredAt | DateTime? | no | Combined day + time-of-day for the stop (owner-set). Ordering is `order`, not this. |
 | body | String? | no | Written entry. Plain text in P1; rendered as markdown from P3. |
+| motif | String @default("none") | yes | Per-stop decorative motif the owner picks; rendered as an animated ornament on the serpentine + a card accent (theme-colored). Enum of exactly 14 values: `none` (default) · `flower` · `mountain` · `tree` · `train` · `plane` · `boat` · `car` · `tent` · `camera` · `star` · `compass` · `sun` · `heart`. Validated as the `StopMotif` enum at the API boundary (unknown values → 400). **Added by a single additive migration** (`20260724120000_stop_motif`); see [`capabilities/story-decor.md`](capabilities/story-decor.md). |
 | createdAt | DateTime @default(now()) | yes | Creation time |
 | updatedAt | DateTime @updatedAt | yes | Last modification |
 | photos | Photo[] | — | Ordered gallery (relation) |
 | tags | StopTag[] | — | (P2) mood/activity tags (relation) |
 
 Constraint: `@@unique([tripId, order])`.
+
+> **Additive `motif` migration:** `motif` is added by a single **additive** Prisma migration (`20260724120000_stop_motif`) — a pure `ALTER TABLE "Stop" ADD COLUMN "motif" TEXT NOT NULL DEFAULT 'none'`. Existing stops **backfill to `none`** via the column default; no table rebuild, no data loss, the existing `file:./dev.db` is preserved.
 
 ### Entity: Photo
 
