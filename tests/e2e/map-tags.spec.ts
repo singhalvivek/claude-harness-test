@@ -123,6 +123,12 @@ test("map overview renders a Leaflet map with a marker per located stop and a ro
     .poll(async () => page.locator(".leaflet-overlay-pane path").count(), { timeout: 15_000 })
     .toBeGreaterThan(0);
 
+  // Pins are interactive: clicking one opens a popup with a "go to this stop"
+  // button (which jumps the story to that stop).
+  await page.locator(".leaflet-marker-icon").first().click();
+  await expect(page.locator(".leaflet-popup")).toBeVisible();
+  await expect(page.locator("[data-map-goto]")).toHaveCount(1);
+
   // Toggling back removes the map and restores the serpentine story.
   await toggle.click();
   await expect(page.locator(".leaflet-container")).toHaveCount(0);

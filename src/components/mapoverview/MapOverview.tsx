@@ -24,7 +24,17 @@ const TripLeafletMap = dynamic(() => import("./TripLeafletMap"), {
   ),
 });
 
-export function MapOverview({ trip }: { trip: Trip }) {
+export function MapOverview({
+  trip,
+  accent,
+  onSelect,
+}: {
+  trip: Trip;
+  /** Active theme accent for pins + route line. */
+  accent?: string;
+  /** Called with a stop id when a pin/popup is clicked (jump to that stop). */
+  onSelect?: (stopId: string) => void;
+}) {
   // Keep only stops with real coordinates, in journey order (stops arrive
   // order-ascending from the API). Narrow lat/lng to non-null numbers.
   const points: MapPoint[] = trip.stops
@@ -60,5 +70,5 @@ export function MapOverview({ trip }: { trip: Trip }) {
     );
   }
 
-  return <TripLeafletMap stops={points} />;
+  return <TripLeafletMap stops={points} accent={accent} onSelect={onSelect} />;
 }

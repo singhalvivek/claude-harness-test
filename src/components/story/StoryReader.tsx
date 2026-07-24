@@ -46,6 +46,23 @@ export function StoryReader({ trip }: { trip: Trip }) {
   const [showMap, setShowMap] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
+  // Clicking a map pin jumps the story to that stop. If a tag filter is hiding
+  // the target, clear it first so the stop is in the DOM, then smooth-scroll it
+  // into view (double rAF lets the filtered stop render before we scroll).
+  function handleSelectStop(stopId: string) {
+    const visible = selectedTagIds.length === 0 ||
+      trip.stops.some(
+        (s) => s.id === stopId && s.tags.some((t) => selectedTagIds.includes(t.id)),
+      );
+    if (!visible) setSelectedTagIds([]);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-stop-id="${stopId}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }),
+    );
+  }
+
   // Tag filter (ANY / union). An empty selection shows every stop. Passing fewer
   // stops re-derives the serpentine geometry cleanly (StoryView recomputes it).
   const filterActive = selectedTagIds.length > 0;
@@ -129,7 +146,13 @@ export function StoryReader({ trip }: { trip: Trip }) {
                 Close
               </button>
             </div>
-            <MapOverview trip={trip} />
+            <MapOverview trip={trip} accent={accent} onSelect={handleSelectStop} />
+            <p
+              className="px-4 py-2 text-center text-xs"
+              style={{ color: withAlpha(titleColor, 0.6) }}
+            >
+              Tip: click a pin to jump to that stop in the story.
+            </p>
           </div>
         </section>
       )}

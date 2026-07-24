@@ -52,6 +52,7 @@ export function StopCard({ stop, side, top, reduce, card }: StopCardProps) {
     transform: `translateY(-50%)${rotate ? ` rotate(${rotate}deg)` : ""}`,
     width: `${card.widthPct}%`,
     maxWidth: card.maxWidth,
+    scrollMarginTop: 96,
   };
   const inset = `${card.sideInsetPct}%`;
   if (side === "left") wrapperStyle.left = inset;
@@ -120,7 +121,7 @@ export function StopCard({ stop, side, top, reduce, card }: StopCardProps) {
   );
 
   return (
-    <div ref={wrapperRef} className="absolute z-10" style={wrapperStyle}>
+    <div ref={wrapperRef} data-stop-id={stop.id} className="absolute z-10" style={wrapperStyle}>
       <motion.article
         data-stop-card
         {...enterProps}
