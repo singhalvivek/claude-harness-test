@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getPublicTrip, type Trip } from "@/lib/api-client";
-import { StoryView } from "@/components/story/StoryView";
+import { StoryReader } from "@/components/story/StoryReader";
 import { getTheme } from "@/components/story/themes";
 
 type Status = "loading" | "not-available" | "ready";
@@ -86,9 +86,7 @@ export default function PublicStoryPage() {
           {trip.stops.length === 0 ? (
             <EmptyState title={trip.title} />
           ) : (
-            <div className="pb-24">
-              <StoryView trip={trip} />
-            </div>
+            <StoryReader trip={trip} />
           )}
         </>
       )}

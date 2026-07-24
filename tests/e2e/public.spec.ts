@@ -165,6 +165,45 @@ test("published trip renders read-only at /s/<slug> with no edit controls in a f
   }
 });
 
+test("shared /s/<slug> reader has a working tag filter (parity with the owner story)", async ({
+  page,
+  browser,
+}) => {
+  const tripId = await seedTrip(page);
+
+  // Tag ONLY the first stop, via the owner API, then publish.
+  const trip = await (await page.request.get(`/api/trips/${tripId}`)).json();
+  const firstStopId: string = trip.stops[0].id;
+  const label = `hiking${Date.now()}`;
+  const tagRes = await page.request.post(`/api/stops/${firstStopId}/tags`, {
+    data: { label, kind: "activity" },
+  });
+  expect(tagRes.ok(), await tagRes.text()).toBeTruthy();
+
+  const slug = await publishAndGetSlug(page, tripId);
+
+  // Fresh, cookieless context — a real visitor opening the shared link.
+  const ctx = await browser.newContext({ reducedMotion: "reduce" });
+  const pub = await ctx.newPage();
+  try {
+    await pub.goto(`/s/${slug}`);
+
+    // The filter is present on the shared page and all three stops show initially.
+    await expect(pub.locator("[data-tag-filter]")).toBeVisible();
+    await expect(pub.locator("[data-stop-card]")).toHaveCount(3);
+
+    // Selecting the tag hides the two untagged stops (only the tagged one remains).
+    await pub.locator(`[data-tag-chip="${label}"]`).click();
+    await expect(pub.locator("[data-stop-card]")).toHaveCount(1);
+
+    // Clearing restores all three.
+    await pub.locator("[data-tag-clear]").click();
+    await expect(pub.locator("[data-stop-card]")).toHaveCount(3);
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("unknown and unpublished slugs are indistinguishable 404s (not probeable)", async ({
   page,
   browser,
