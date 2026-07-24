@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# next.js
+.next/
+/out/
+
+# production build artifacts
+/build
+
+# local photo storage (never commit uploaded bytes)
+/storage
+
+# sqlite databases
+*.db
+*.db-journal
+prisma/dev.db
+
+# env files (secrets live here — never commit; .env.example IS committed)
+.env
+.env.local
+.env*.local
+
+# playwright
+playwright-report/
+test-results/
+/blob-report/
+/playwright/.cache/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# misc
+.DS_Store
+*.log
+/coverage

@@ -1,0 +1,65 @@
+// Wanderline data model — SQLite via Prisma (SQLite is the production DB here).
+// Photo BYTES never live in the DB; the DB stores opaque storage keys resolved
+// to URLs at read time via storage.url(key). See spec/data.md + spec/architecture.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Trip {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  coverPhotoId String?
+  // shareSlug / isPublished exist in Phase 1 (nullable / default) but are
+  // only populated by the Phase 2 publish flow.
+  shareSlug    String?  @unique
+  isPublished  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stops Stop[]
+}
+
+model Stop {
+  id                String    @id @default(cuid())
+  tripId            String
+  trip              Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  order             Int
+  title             String?
+  placeName         String?
+  lat               Float?
+  lng               Float?
+  // "exact" | "approximate" | "none"
+  locationPrecision String    @default("none")
+  occurredAt        DateTime?
+  body              String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  photos Photo[]
+
+  @@unique([tripId, order])
+}
+
+model Photo {
+  id          String   @id @default(cuid())
+  stopId      String
+  stop        Stop     @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  order       Int
+  isCover     Boolean  @default(false)
+  webKey      String
+  thumbKey    String
+  originalKey String
+  width       Int
+  height      Int
+  caption     String?
+  createdAt   DateTime @default(now())
+
+  @@unique([stopId, order])
+}
