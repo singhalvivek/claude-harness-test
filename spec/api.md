@@ -23,17 +23,20 @@ Conventions: 200 OK, 201 Created, 204 No Content; 400 invalid body (zod), 401 un
 
 ## Trips
 
+> **`StoryTheme`** — the per-trip story look, one of `"cinematic" | "editorial" | "minimal" | "vintage"` (default `"cinematic"`). Exported from `src/lib/api-client.ts`. Present on `Trip` and `TripSummary` responses; accepted (optional) on trip create/patch and **validated with a `zod` enum** — an unknown value returns **400** and is never persisted. Backing column: `Trip.theme` (`data.md`); render contract: [`capabilities/story-themes.md`](capabilities/story-themes.md).
+
 ### `GET /api/trips` *(owner)*
-**Response 200:** `{ "trips": TripSummary[] }` where `TripSummary = { id, title, description, coverThumbUrl: string|null, stopCount: number, isPublished: boolean, updatedAt: string }`.
+**Response 200:** `{ "trips": TripSummary[] }` where `TripSummary = { id, title, description, coverThumbUrl: string|null, stopCount: number, isPublished: boolean, updatedAt: string, theme: StoryTheme }`.
 
 ### `POST /api/trips` *(owner)*
-**Request:** `{ "title": string, "description"?: string }`. **Response 201:** `Trip` (see full shape below). **Errors:** 400 empty title.
+**Request:** `{ "title": string, "description"?: string, "theme"?: StoryTheme }`. `theme` is optional and defaults to `"cinematic"` (DB default) when omitted; a supplied value is zod-enum-validated. **Response 201:** `Trip` (see full shape below, including `theme`). **Errors:** 400 empty title; 400 unknown `theme` value.
 
 ### `GET /api/trips/:tripId` *(owner)*
 **Response 200:** full trip used by both editor and story:
 ```json
 {
   "id": "…", "title": "…", "description": "…",
+  "theme": "cinematic",
   "isPublished": false, "shareSlug": null,
   "stops": [
     {
@@ -54,7 +57,7 @@ Conventions: 200 OK, 201 Created, 204 No Content; 400 invalid body (zod), 401 un
 Stops and photos are returned **sorted by `order` ascending**. `webUrl`/`thumbUrl` are resolved via `storage.url(key)`. **Errors:** 404 unknown trip.
 
 ### `PATCH /api/trips/:tripId` *(owner)*
-**Request (any subset):** `{ "title"?, "description"?, "coverPhotoId"? }`. **Response 200:** updated `Trip`. Non-destructive — omitted fields are untouched.
+**Request (any subset):** `{ "title"?, "description"?, "coverPhotoId"?, "theme"? }`. `theme` is zod-enum-validated (`StoryTheme`). **Response 200:** updated `Trip` (including `theme`). Non-destructive — omitted fields are untouched. **Errors:** 400 unknown `theme` value.
 
 ### `DELETE /api/trips/:tripId` *(owner)*
 Cascades stops + photos and deletes all photo files via `storage.delete`. **Response 204.**

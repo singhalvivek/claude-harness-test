@@ -11,8 +11,17 @@ import { useParams } from "next/navigation";
 import { getTrip, type Trip } from "@/lib/api-client";
 import { StoryView } from "@/components/story/StoryView";
 import { ComingSoonPill } from "@/components/story/ComingSoonPill";
+import { getTheme } from "@/components/story/themes";
 
 type Status = "loading" | "error" | "ready";
+
+// Default (paper) reader chrome shown while loading and in the error/empty
+// states, before a trip's theme is known.
+const DEFAULT_MAIN_BG = "hsl(43 40% 97%)";
+const DEFAULT_HEADER_CLASS =
+  "sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-ink/10 bg-paper/85 px-4 py-3 text-ink backdrop-blur sm:px-6";
+const DEFAULT_BACK_LINK_CLASS =
+  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-ink/80 transition hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-trail";
 
 export default function StoryPage() {
   const params = useParams<{ tripId: string }>();
@@ -45,14 +54,20 @@ export default function StoryPage() {
     return cancel;
   }, [tripId, load]);
 
+  // Theme the reader chrome once the trip (and its theme) is known, so the top
+  // bar never clashes with a dark/kraft story ground. The labelled "coming
+  // soon" stubs stay legible on every theme.
+  const treatment =
+    status === "ready" && trip && trip.stops.length > 0 ? getTheme(trip.theme) : null;
+  const mainBg = treatment?.rootStyle.backgroundColor ?? DEFAULT_MAIN_BG;
+  const headerClassName = treatment?.chrome.headerClassName ?? DEFAULT_HEADER_CLASS;
+  const backLinkClassName = treatment?.chrome.backLinkClassName ?? DEFAULT_BACK_LINK_CLASS;
+
   return (
-    <main className="min-h-screen bg-paper text-ink">
+    <main className="min-h-screen" style={{ backgroundColor: mainBg }}>
       {/* Reader chrome: Back to editor + labelled "coming soon" stubs. */}
-      <header className="sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-ink/10 bg-paper/85 px-4 py-3 backdrop-blur sm:px-6">
-        <Link
-          href={`/trips/${tripId}/edit`}
-          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-ink/80 transition hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-trail"
-        >
+      <header className={headerClassName}>
+        <Link href={`/trips/${tripId}/edit`} className={backLinkClassName}>
           <span aria-hidden="true">←</span> Back to editor
         </Link>
         <div className="flex items-center gap-2">

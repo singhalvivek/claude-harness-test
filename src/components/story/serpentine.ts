@@ -9,8 +9,12 @@
 
 /** Vertical space (px) reserved at the top for the story header stretch. */
 export const HEADER_HEIGHT = 380;
-/** Vertical space (px) allotted to each stop segment. */
-export const SEGMENT_HEIGHT = 560;
+/**
+ * Default vertical space (px) allotted to each stop segment. Themes override
+ * this with a densified value (~380–440px) via `buildGeometry`'s third arg;
+ * this default stays a sensible fallback when none is supplied.
+ */
+export const SEGMENT_HEIGHT = 440;
 /** Extra breathing room (px) below the final stop. */
 export const BOTTOM_PAD = 200;
 
@@ -41,18 +45,25 @@ export interface NodeAnchor {
  * path spans exactly the (fixed-height) track and stays aligned with the
  * absolutely-positioned stop cards regardless of their content height.
  */
-export function buildGeometry(width: number, count: number): SerpentineGeometry {
+export function buildGeometry(
+  width: number,
+  count: number,
+  segmentHeight: number = SEGMENT_HEIGHT,
+): SerpentineGeometry {
   const safeWidth = Math.max(width, 320);
   const safeCount = Math.max(count, 0);
+  // Clamp the per-theme segment height to a sane band so a bad value can never
+  // collapse the geometry (or make cards overlap).
+  const seg = Math.min(Math.max(segmentHeight, 320), 640);
   // Keep the winding within comfortable columns; clamp so it reads well on
   // both narrow and wide viewports.
   const marginX = Math.min(Math.max(safeWidth * 0.22, 60), 260);
-  const height = HEADER_HEIGHT + safeCount * SEGMENT_HEIGHT + BOTTOM_PAD;
+  const height = HEADER_HEIGHT + safeCount * seg + BOTTOM_PAD;
   return {
     width: safeWidth,
     height,
     headerHeight: HEADER_HEIGHT,
-    segmentHeight: SEGMENT_HEIGHT,
+    segmentHeight: seg,
     count: safeCount,
     marginX,
     midX: safeWidth / 2,

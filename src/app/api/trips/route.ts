@@ -19,6 +19,7 @@ type TripWithStops = {
   id: string;
   title: string;
   description: string | null;
+  theme: string;
   coverPhotoId: string | null;
   isPublished: boolean;
   updatedAt: Date;
@@ -41,9 +42,13 @@ function deriveCoverThumbUrl(trip: TripWithStops): string | null {
   return null;
 }
 
+// Frozen StoryTheme enum (see spec/api.md + spec/capabilities/story-themes.md).
+const themeEnum = z.enum(["cinematic", "editorial", "minimal", "vintage"]);
+
 const createSchema = z.object({
   title: z.string().trim().min(1),
   description: z.string().optional(),
+  theme: themeEnum.optional(),
 });
 
 async function handleGet(): Promise<NextResponse> {
@@ -70,6 +75,7 @@ async function handleGet(): Promise<NextResponse> {
     stopCount: trip.stops.length,
     isPublished: trip.isPublished,
     updatedAt: trip.updatedAt.toISOString(),
+    theme: trip.theme,
   }));
 
   return NextResponse.json({ trips: summaries }, { status: 200 });
@@ -91,6 +97,8 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     data: {
       title: parsed.data.title,
       description: parsed.data.description,
+      // undefined → DB column default ('cinematic')
+      theme: parsed.data.theme,
     },
   });
 
@@ -99,6 +107,7 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
       id: trip.id,
       title: trip.title,
       description: trip.description,
+      theme: trip.theme,
       isPublished: trip.isPublished,
       shareSlug: trip.shareSlug,
       stops: [],

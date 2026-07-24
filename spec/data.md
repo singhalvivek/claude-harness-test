@@ -22,12 +22,15 @@ A single journey — an ordered collection of stops, authored by the owner.
 | id | String (cuid) | yes | Primary key |
 | title | String | yes | Trip title shown on home + story header |
 | description | String? | no | Short intro/subtitle for the story |
+| theme | String @default("cinematic") | yes | Per-trip story look. Enum of exactly four values: `cinematic` (default) · `editorial` · `minimal` · `vintage`. Drives the themed story render; see [`capabilities/story-themes.md`](capabilities/story-themes.md). Validated as the `StoryTheme` enum at the API boundary (unknown values → 400). **Added in Phase 1.5** by a single additive migration. |
 | coverPhotoId | String? | no | Optional explicit hero photo; if null, derive from the first stop's cover |
 | shareSlug | String? @unique | no | Unguessable public slug (≥ 24 random URL-safe chars). Null until published. **Column exists in P1** (nullable), populated in P2. |
 | isPublished | Boolean @default(false) | yes | Whether the public share link is live (P2). Always false in P1. |
 | createdAt | DateTime @default(now()) | yes | Creation time |
 | updatedAt | DateTime @updatedAt | yes | Last modification |
 | stops | Stop[] | — | Ordered stops (relation) |
+
+> **Additive `theme` migration (Phase 1.5):** `theme` is added by a single **additive** Prisma migration — a pure `ALTER TABLE "Trip" ADD COLUMN "theme" TEXT NOT NULL DEFAULT 'cinematic'`. Existing rows **backfill to `cinematic`** via the column default; no table reset, no data loss, the existing `file:./dev.db` is preserved. Owned by `slice-theme-data-api` (see `../roadmap.md` → Phase 1.5).
 
 ### Entity: Stop
 

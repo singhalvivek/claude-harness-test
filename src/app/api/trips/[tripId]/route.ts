@@ -46,16 +46,21 @@ function serializeTrip(t: TripFull) {
     id: t.id,
     title: t.title,
     description: t.description,
+    theme: t.theme,
     isPublished: t.isPublished,
     shareSlug: t.shareSlug,
     stops: [...t.stops].sort((a, b) => a.order - b.order).map(serializeStop),
   };
 }
 
+// Frozen StoryTheme enum (see spec/api.md + spec/capabilities/story-themes.md).
+const themeEnum = z.enum(["cinematic", "editorial", "minimal", "vintage"]);
+
 const patchSchema = z.object({
   title: z.string().trim().min(1).optional(),
   description: z.string().nullable().optional(),
   coverPhotoId: z.string().nullable().optional(),
+  theme: themeEnum.optional(),
 });
 
 function loadFullTrip(tripId: string) {
@@ -103,6 +108,7 @@ async function handlePatch(
   if (parsed.data.title !== undefined) data.title = parsed.data.title;
   if (parsed.data.description !== undefined) data.description = parsed.data.description;
   if (parsed.data.coverPhotoId !== undefined) data.coverPhotoId = parsed.data.coverPhotoId;
+  if (parsed.data.theme !== undefined) data.theme = parsed.data.theme;
 
   if (Object.keys(data).length > 0) {
     await prisma.trip.update({ where: { id: tripId }, data });

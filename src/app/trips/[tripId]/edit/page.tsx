@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { addStop, deleteStop, getTrip, reorderStops, type Trip } from "@/lib/api-client";
 import { TripHeader, type SaveStatus } from "@/components/editor/TripHeader";
+import { ThemePicker } from "@/components/editor/ThemePicker";
 import { StopList } from "@/components/editor/StopList";
 import { StopPanel } from "@/components/editor/StopPanel";
 import { Button } from "@/components/ui/Button";
@@ -160,6 +161,10 @@ export default function EditorPage() {
       {!loading && trip && (
         <>
           <TripHeader trip={trip} onSaveStatus={setSaveStatus} refresh={refresh} />
+
+          <div className="mt-6">
+            <ThemePicker trip={trip} refresh={refresh} onSaveStatus={setSaveStatus} />
+          </div>
 
           <section className="mt-8">
             <div className="mb-3 flex flex-wrap items-center gap-2">

@@ -131,7 +131,13 @@ export interface PhotoStorage {
 
 **`src/lib/photos.ts`** — `export async function processUpload(file: { buffer: Buffer; filename: string; contentType: string }, opts: { tripId: string; stopId: string }): Promise<{ webKey: string; thumbKey: string; originalKey: string; width: number; height: number }>`. Runs sharp (web ≤ 1600px long edge, thumb ≤ 400px), writes all three via `storage.save`, returns keys + web dimensions. Callers resolve URLs via `storage.url(key)`.
 
-**`src/lib/api-client.ts`** — typed `fetch` wrappers matching every route in `api.md` (e.g. `createTrip`, `listTrips`, `getTrip`, `addStop`, `reorderStops`, `uploadPhotos`, `setCover`, `geocode`). Both frontend slices import these; the shapes equal `api.md`'s response types.
+**`src/lib/api-client.ts`** — typed `fetch` wrappers matching every route in `api.md` (e.g. `createTrip`, `listTrips`, `getTrip`, `addStop`, `reorderStops`, `uploadPhotos`, `setCover`, `geocode`). Both frontend slices import these; the shapes equal `api.md`'s response types. **Phase-1.5 additions (frozen — all three theme slices code against these):**
+```ts
+export type StoryTheme = "cinematic" | "editorial" | "minimal" | "vintage"; // default "cinematic"
+```
+- `Trip.theme: StoryTheme` and `TripSummary.theme: StoryTheme` added to the response types.
+- `CreateTripInput.theme?: StoryTheme` and `TripPatch.theme?: StoryTheme` added to the input types.
+- Existing wrappers (`createTrip`, `updateTrip`, `getTrip`, `listTrips`) carry `theme` unchanged in signature — only the type shapes gain the field. `src/lib/api-client.ts` is edited **only** by `slice-theme-data-api`; the two frontend theme slices import `StoryTheme`/`Trip` from it (contract dependency, not a write).
 
 **`src/lib/logger.ts`** — `export const log: { info; warn; error }` emitting single-line JSON `{ ts, level, msg, ...fields }` to stdout. Route handlers log `{ method, path, status, ms }` per request (observability from day one; no LLM tracing since there is no LLM).
 

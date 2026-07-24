@@ -29,6 +29,7 @@ Editorial and photographic: generous whitespace, large imagery, a warm serif for
 **Purpose:** author a trip: edit trip meta, add/edit/reorder/delete stops, set each stop's location and photos. Robust and non-destructive (autosave-on-blur + explicit **Save**; unsaved-change indicator).
 **Key elements:**
 - **Trip header:** inline-editable title + description (autosave on blur → `PATCH /api/trips/:id`). **View story** button.
+- **Story theme picker** (Phase 1.5, `src/components/editor/ThemePicker.tsx`, lives in the editor near the trip header): four selectable **swatches with labels** — **Cinematic** (default), **Editorial**, **Minimal**, **Vintage** — each swatch previewing its palette/mood via inline swatch styling (the picker uses inline styles for swatch colors and does **not** edit the Tailwind config). Picking a theme **live-saves** immediately via `updateTrip(tripId, { theme })`, shows the shared "Saving… / Saved ✓" indicator, and the choice persists across reload. The currently-selected theme is visibly marked. See [`capabilities/story-themes.md`](capabilities/story-themes.md).
 - **Ordered stop list:** each stop card shows its index, place name, date/time, and a cover thumbnail, with **↑ / ↓** reorder buttons, **Edit**, and **Delete** (confirm). Reorder calls `POST /api/trips/:id/stops/reorder`. (`Assumed:` Phase 1 uses ↑/↓ buttons for robust, first-time-right reordering; drag-and-drop is a later nicety and not required for the gate.)
 - **Add / Edit Stop panel** (drawer or inline form):
   - **Location picker** with three tabs:
@@ -51,8 +52,14 @@ Editorial and photographic: generous whitespace, large imagery, a warm serif for
 - **Cover photos** get **parallax** (translateY tied to scroll) for depth.
 - **Story header:** trip title + description over the first stretch of path.
 **Actions:** scroll to read; click a stop to expand its gallery; **Back to editor** (owner).
+**Themed rendering (Phase 1.5):** the story root carries `data-theme="<theme>"` (from `Trip.theme`) and renders in one of four looks — each fixing the shipped view's weak spacing/cards/photos/background/type while keeping the serpentine, marker, parallax, and cards intact (only *styling* differs). The four looks:
+- **Cinematic** (default) — dark immersive canvas, near-full-bleed hero cover photos, glassy translucent caption cards, a **glowing** path + marker, a vignette/gradient-filled dark background.
+- **Editorial** — the warm paper + terracotta feel **refined and densified**: tighter rhythm, richer cards, better serif type, larger photos, a textured/tinted paper background (the terracotta path/marker stay).
+- **Minimal** — restrained neutral palette, clean sans type, large edge-to-edge card photos, a **thin** understated path + small marker, a subtle tonal/gridded background.
+- **Vintage** — scrapbook/postcard: kraft-paper textured background, taped/framed photos, stamp accents, handwritten-style headings, a **dashed** route line.
+Every theme materially **tightens** the vertical spacing between stops vs. the shipped view. See [`capabilities/story-themes.md`](capabilities/story-themes.md).
 **Labelled stubs:** **Map overview** toggle (renders "coming soon" in P1) and **Share** button (coming soon).
-**Reduced motion:** with `prefers-reduced-motion`, the path renders fully drawn and cards simply fade — no scroll-jacking.
+**Reduced motion:** with `prefers-reduced-motion`, the path renders fully drawn and cards simply fade — no scroll-jacking, in every theme.
 
 ### Screen: Public Story (`/s/[slug]`) — `slice-public-ui` *(Phase 2)*
 Same story rendering as above but **read-only**: no header edit/Back-to-editor controls, no owner chrome, no login prompt. Served from `GET /api/public/trips/:slug`. In Phase 1 the **Share** button that would produce this link is a labelled stub.

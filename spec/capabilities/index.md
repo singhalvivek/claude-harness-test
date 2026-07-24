@@ -17,6 +17,7 @@ A single, discrete behavior the app performs (e.g. "authenticate the owner", "se
 | Stop location (search / map / manual) | 1 (core) | [stop-location.md](stop-location.md) |
 | Photo gallery (upload / resize / cover) | 1 (core) | [photo-gallery.md](photo-gallery.md) |
 | Serpentine story view | 1 (core) | [serpentine-story-view.md](serpentine-story-view.md) |
+| Story themes (per-trip look) | 1.5 | [story-themes.md](story-themes.md) |
 | Public share link | 2 | [public-share-link.md](public-share-link.md) |
 | Real-map overview | 2 | [real-map-overview.md](real-map-overview.md) |
 | Mood / activity tags + filter | 2 | [mood-activity-tags.md](mood-activity-tags.md) |

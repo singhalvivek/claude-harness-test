@@ -17,6 +17,7 @@ import {
 import type { Trip } from "@/lib/api-client";
 import { StopCard } from "./StopCard";
 import { buildGeometry, serpentinePathD, nodeAnchors } from "./serpentine";
+import { getTheme } from "./themes";
 
 // useLayoutEffect on the client, useEffect on the server (avoids the SSR
 // warning). Measuring the path before paint prevents a full-drawn flash.
@@ -28,11 +29,14 @@ export function StoryView({ trip }: { trip: Trip }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
 
+  // Resolve the trip's theme (unknown / missing → cinematic).
+  const theme = getTheme(trip.theme);
+
   const [width, setWidth] = useState(1024);
   const [pathLen, setPathLen] = useState(0);
 
   const stops = trip.stops;
-  const geom = buildGeometry(width, stops.length);
+  const geom = buildGeometry(width, stops.length, theme.segmentHeight);
   const d = serpentinePathD(geom);
   const anchors = nodeAnchors(geom);
 
@@ -89,86 +93,129 @@ export function StoryView({ trip }: { trip: Trip }) {
 
   const svgStyle: CSSProperties = { width: geom.width, height: geom.height };
 
+  const m = theme.marker;
+  const markerDotStyle: CSSProperties = {
+    width: m.size,
+    height: m.size,
+    marginLeft: -m.size / 2,
+    marginTop: -m.size / 2,
+    backgroundColor: m.color,
+    borderRadius: m.round ? "9999px" : "3px",
+    boxShadow: `0 0 0 4px ${m.ringColor}${m.glow ? `, ${m.glow}` : ""}`,
+    // Non-round → a postage-stamp: slight tilt + a dashed perforation edge.
+    ...(m.round
+      ? {}
+      : { transform: "rotate(-7deg)", outline: `2px dashed ${m.ringColor}`, outlineOffset: "-4px" }),
+  };
+
   return (
+    // Themed story root: carries data-theme + the filled background; the
+    // signature layer + centered track sit on top.
     <div
-      ref={trackRef}
-      className="relative mx-auto w-full max-w-5xl px-4"
-      style={{ height: geom.height }}
+      data-theme={theme.id}
+      className="relative w-full overflow-hidden"
+      style={{ ...theme.rootStyle, minHeight: geom.height }}
     >
-      {/* The serpentine path, drawn behind the cards. */}
-      <svg
-        className="pointer-events-none absolute left-0 top-0"
-        style={svgStyle}
-        viewBox={`0 0 ${geom.width} ${geom.height}`}
-        preserveAspectRatio="none"
+      {/* Per-theme signature layer (glow / paper / grid / kraft). Cinematic pins
+          its vignette to the viewport (signatureFixed); the rest tile the page. */}
+      <div
+        data-theme-signature
         aria-hidden="true"
-      >
-        <path
-          d={d}
-          fill="none"
-          stroke="hsl(18 62% 47% / 0.12)"
-          strokeWidth={14}
-          strokeLinecap="round"
-        />
-        <motion.path
-          ref={pathRef}
-          data-serpentine
-          d={d}
-          fill="none"
-          stroke="hsl(18 62% 47%)"
-          strokeWidth={4}
-          strokeLinecap="round"
-          strokeDasharray={pathLen || undefined}
-          style={
-            reduce
-              ? { strokeDashoffset: 0, opacity: pathLen ? 1 : 0 }
-              : { strokeDashoffset: dashOffset, opacity: pathLen ? 1 : 0 }
-          }
-        />
-      </svg>
+        className={`${theme.signatureClassName}${theme.signatureFixed ? " fixed inset-0" : ""}`}
+        style={theme.signatureStyle}
+      />
 
-      {/* Story header over the first stretch of the path. */}
-      <header
-        className="pointer-events-none absolute left-1/2 top-0 z-10 w-full max-w-3xl -translate-x-1/2 px-6 pt-20 text-center"
-        style={{ height: geom.headerHeight }}
+      <div
+        ref={trackRef}
+        className="relative z-10 mx-auto w-full max-w-5xl px-4"
+        style={{ height: geom.height }}
       >
-        <h1 className="font-serif text-5xl leading-tight text-ink sm:text-6xl">
-          {trip.title}
-        </h1>
-        {trip.description && (
-          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-ink/70">
-            {trip.description}
-          </p>
-        )}
-        <p className="mt-10 text-sm font-medium uppercase tracking-[0.2em] text-trail">
-          Scroll to follow the journey
-        </p>
-      </header>
-
-      {/* Traveling marker — travels the route as scroll advances. */}
-      <motion.div
-        data-story-marker
-        className="pointer-events-none absolute left-0 top-0 z-20"
-        style={reduce ? { x: geom.midX, y: 0 } : { x: markerX, y: markerY }}
-      >
-        <div className="relative -ml-3.5 -mt-3.5 h-7 w-7 rounded-full bg-trail shadow-lg ring-4 ring-paper">
-          <span className="absolute inset-0 animate-ping rounded-full bg-trail/40" />
-        </div>
-      </motion.div>
-
-      {/* Stop cards anchored along the path, order-ascending, alternating side. */}
-      {stops.map((stop, i) => {
-        const anchor = anchors[i];
-        return (
-          <StopCard
-            key={stop.id}
-            stop={stop}
-            side={anchor.side}
-            top={anchor.cy}
-            reduce={reduce}
+        {/* The serpentine path, drawn behind the cards. */}
+        <svg
+          className="pointer-events-none absolute left-0 top-0"
+          style={svgStyle}
+          viewBox={`0 0 ${geom.width} ${geom.height}`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path
+            d={d}
+            fill="none"
+            stroke={theme.underlayStroke}
+            strokeWidth={theme.underlayWidth}
+            strokeLinecap="round"
+            strokeDasharray={theme.underlayDash}
           />
-        );
-      })}
+          <motion.path
+            ref={pathRef}
+            data-serpentine
+            d={d}
+            fill="none"
+            stroke={theme.drawStroke}
+            strokeWidth={theme.drawWidth}
+            strokeLinecap="round"
+            strokeDasharray={pathLen || undefined}
+            style={
+              reduce
+                ? { strokeDashoffset: 0, opacity: pathLen ? 1 : 0, filter: theme.drawFilter }
+                : { strokeDashoffset: dashOffset, opacity: pathLen ? 1 : 0, filter: theme.drawFilter }
+            }
+          />
+        </svg>
+
+        {/* Story header over the first stretch of the path. */}
+        <header
+          className="pointer-events-none absolute left-1/2 top-0 z-10 w-full max-w-3xl -translate-x-1/2 px-6 pt-20 text-center"
+          style={{ height: geom.headerHeight }}
+        >
+          <h1 className={theme.headerTitleClassName} style={theme.headerTitleStyle}>
+            {trip.title}
+          </h1>
+          {trip.description && (
+            <p className={theme.headerDescClassName} style={theme.headerDescStyle}>
+              {trip.description}
+            </p>
+          )}
+          <p className={theme.headerKickerClassName} style={theme.headerKickerStyle}>
+            Scroll to follow the journey
+          </p>
+        </header>
+
+        {/* Traveling marker — travels the route as scroll advances. */}
+        <motion.div
+          data-story-marker
+          className="pointer-events-none absolute left-0 top-0 z-20"
+          style={reduce ? { x: geom.midX, y: 0 } : { x: markerX, y: markerY }}
+        >
+          <div className="relative" style={markerDotStyle}>
+            {m.ping && (
+              <span
+                className="absolute inset-0 animate-ping"
+                style={{
+                  backgroundColor: m.color,
+                  opacity: 0.4,
+                  borderRadius: m.round ? "9999px" : "3px",
+                }}
+              />
+            )}
+          </div>
+        </motion.div>
+
+        {/* Stop cards anchored along the path, order-ascending, alternating side. */}
+        {stops.map((stop, i) => {
+          const anchor = anchors[i];
+          return (
+            <StopCard
+              key={stop.id}
+              stop={stop}
+              side={anchor.side}
+              top={anchor.cy}
+              reduce={reduce}
+              card={theme.card}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

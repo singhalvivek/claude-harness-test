@@ -9,6 +9,9 @@
 
 export type LocationPrecision = "exact" | "approximate" | "none";
 
+// Per-trip story look (see spec/capabilities/story-themes.md). Default "cinematic".
+export type StoryTheme = "cinematic" | "editorial" | "minimal" | "vintage";
+
 export interface Tag {
   id: string;
   label: string;
@@ -44,6 +47,7 @@ export interface Trip {
   id: string;
   title: string;
   description: string | null;
+  theme: StoryTheme;
   isPublished: boolean;
   shareSlug: string | null;
   stops: Stop[];
@@ -57,6 +61,7 @@ export interface TripSummary {
   stopCount: number;
   isPublished: boolean;
   updatedAt: string; // ISO 8601
+  theme: StoryTheme;
 }
 
 export interface GeocodeCandidate {
@@ -77,12 +82,14 @@ export interface SessionState {
 export interface CreateTripInput {
   title: string;
   description?: string;
+  theme?: StoryTheme;
 }
 
 export interface TripPatch {
   title?: string;
   description?: string;
   coverPhotoId?: string | null;
+  theme?: StoryTheme;
 }
 
 export interface StopInput {
