@@ -68,8 +68,8 @@ One image in a stop's gallery. Stored in three derived forms; DB holds keys only
 | stopId | String | yes | FK → Stop.id (`onDelete: Cascade`) |
 | order | Int | yes | Position in the gallery (0-based). Unique per stop. |
 | isCover | Boolean @default(false) | yes | Exactly one cover per stop (enforced in app logic within a transaction) |
-| webKey | String | yes | Storage key of the web-optimized derivative (≤ 1600px long edge) |
-| thumbKey | String | yes | Storage key of the thumbnail (≤ 400px long edge) |
+| webKey | String | yes | Storage key of the *displayed* image — the full-resolution original itself (browser-renderable formats), else a full-res JPEG fallback. No downscaling. |
+| thumbKey | String | yes | Storage key of the displayed image (same object as `webKey`; kept for the storage-key contract). |
 | originalKey | String | yes | Storage key of the retained original upload |
 | width | Int | yes | Web derivative width (for layout + parallax aspect) |
 | height | Int | yes | Web derivative height |
