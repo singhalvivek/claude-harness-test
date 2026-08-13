@@ -8,7 +8,7 @@
 // R2-backed keys. Photos are public.
 import { AwsClient } from "aws4fetch";
 import { env } from "@/lib/env";
-import type { PhotoStorage, SavedObject } from "./types";
+import type { PhotoStorage, PresignedUpload, SavedObject } from "./types";
 
 export class R2Storage implements PhotoStorage {
   private readonly client: AwsClient;
@@ -68,5 +68,18 @@ export class R2Storage implements PhotoStorage {
   url(key: string): string {
     const encoded = key.split("/").map(encodeURIComponent).join("/");
     return `${this.publicBase}/${encoded}`;
+  }
+
+  async presignUpload({ key }: { key: string; contentType: string }): Promise<PresignedUpload> {
+    // A presigned (query-signed) PUT URL the browser uploads to directly. The
+    // Content-Type is sent by the client but left OUT of the signature so the
+    // browser needs no exact-header match. Expires in 10 minutes.
+    const target = new URL(this.objectUrl(key));
+    target.searchParams.set("X-Amz-Expires", "600");
+    const signed = await this.client.sign(target.toString(), {
+      method: "PUT",
+      aws: { signQuery: true },
+    });
+    return { url: signed.url, method: "PUT" };
   }
 }

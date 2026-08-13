@@ -254,6 +254,66 @@ export async function uploadPhotos(stopId: string, files: File[]): Promise<Photo
   return data.photos;
 }
 
+interface PresignResponse {
+  key: string;
+  uploadUrl: string;
+  method: "PUT";
+}
+
+/** Read an image's pixel dimensions in the browser (0×0 if it can't decode,
+ *  e.g. HEIC). Only drives layout aspect, never correctness. */
+function readImageSize(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !file.type.startsWith("image/")) {
+      resolve({ width: 0, height: 0 });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 });
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+}
+
+/**
+ * Upload ONE photo DIRECTLY to storage (R2, or the local receiver in dev),
+ * bypassing the serverless request-body size limit so full-resolution originals
+ * of any size work: presign → PUT the bytes straight to storage → complete
+ * (create the Photo row). Returns the created Photo.
+ */
+export async function uploadPhotoDirect(stopId: string, file: File): Promise<Photo> {
+  const contentType = file.type || "application/octet-stream";
+  const { width, height } = await readImageSize(file);
+
+  const presign = await request<PresignResponse>(
+    `/api/stops/${encodeURIComponent(stopId)}/photos/presign`,
+    jsonInit("POST", { filename: file.name, contentType }),
+  );
+
+  // PUT the bytes directly to storage. Same-origin (local) sends the session
+  // cookie by default; the cross-origin R2 presigned URL needs no cookies.
+  const put = await fetch(presign.uploadUrl, {
+    method: presign.method,
+    body: file,
+    headers: { "Content-Type": contentType },
+  });
+  if (!put.ok) {
+    throw new ApiError(put.status, `Upload failed with status ${put.status}`);
+  }
+
+  return request<Photo>(
+    `/api/stops/${encodeURIComponent(stopId)}/photos/complete`,
+    jsonInit("POST", { key: presign.key, width, height }),
+  );
+}
+
 export function updatePhoto(photoId: string, patch: PhotoPatch): Promise<Photo> {
   return request<Photo>(`/api/photos/${encodeURIComponent(photoId)}`, jsonInit("PATCH", patch));
 }
