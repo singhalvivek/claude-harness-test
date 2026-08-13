@@ -1,0 +1,93 @@
+// Wanderline data model — SQLite via Prisma (SQLite is the production DB here).
+// Photo BYTES never live in the DB; the DB stores opaque storage keys resolved
+// to URLs at read time via storage.url(key). See spec/data.md + spec/architecture.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Trip {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  // story theme: "cinematic" | "editorial" | "minimal" | "vintage" (default cinematic)
+  theme        String   @default("cinematic")
+  coverPhotoId String?
+  // shareSlug / isPublished exist in Phase 1 (nullable / default) but are
+  // only populated by the Phase 2 publish flow.
+  shareSlug    String?  @unique
+  isPublished  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  stops Stop[]
+}
+
+model Stop {
+  id                String    @id @default(cuid())
+  tripId            String
+  trip              Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  order             Int
+  title             String?
+  placeName         String?
+  lat               Float?
+  lng               Float?
+  // "exact" | "approximate" | "none"
+  locationPrecision String    @default("none")
+  occurredAt        DateTime?
+  body              String?
+  // Per-stop decorative motif rendered as an animated ornament on the serpentine
+  // + a card accent. One of: none (default) | flower | mountain | tree | train |
+  // plane | boat | car | tent | camera | star | compass | sun | heart.
+  motif             String    @default("none")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  photos Photo[]
+  tags   StopTag[]
+
+  @@unique([tripId, order])
+}
+
+model Photo {
+  id          String   @id @default(cuid())
+  stopId      String
+  stop        Stop     @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  order       Int
+  isCover     Boolean  @default(false)
+  webKey      String
+  thumbKey    String
+  originalKey String
+  width       Int
+  height      Int
+  caption     String?
+  createdAt   DateTime @default(now())
+
+  @@unique([stopId, order])
+}
+
+// Phase 2 — mood/activity tags. Many-to-many with Stop via the StopTag join
+// table (SQLite has no scalar-list columns, so tags use a relation table).
+model Tag {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  // "mood" | "activity"
+  kind      String
+  createdAt DateTime @default(now())
+
+  stops StopTag[]
+}
+
+model StopTag {
+  stopId String
+  tagId  String
+  stop   Stop @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([stopId, tagId])
+}

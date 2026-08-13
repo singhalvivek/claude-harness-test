@@ -1,62 +1,162 @@
 # Roadmap
 
-> Fill in each section. Run `/zero-shot-build [your idea]` to have it filled automatically.
+> Project working title: **Wanderline** — a visual trip journal.
+> `Assumed:` the product was briefed without a name; "Wanderline" is a working title used across the spec and package name. Rename freely.
 
 ---
 
 ## What This Project Does
 
-<!-- FILL IN: One paragraph describing what this project does, who uses it, and what problem it solves. -->
+Wanderline is a personal, production-quality web app for documenting a trip as an ordered sequence of **stops**. Each stop pins a real-world **location**, a **day/time**, one or more **photos** with captions, and an optional **written entry**. The signature experience is the **reading view**: stops are laid out along a stylized **serpentine** (winding S-curve) path that snakes down the page. As the viewer scrolls, the path **draws itself** progressively, each stop **fades / slides / pops** into view, cover photos gain **parallax** depth, and an **animated marker** travels along the path. The owner writes and arranges the journey; anyone with the trip's secret link reads it (public sharing lands in Phase 2).
 
 ## Who Uses It
 
-<!-- FILL IN: Primary user(s). What is their role? What are they trying to accomplish? -->
+- **The owner** (single user) — authenticates with one password, creates and edits trips, adds and reorders stops, sets locations, uploads photos, and previews the story. The owner is the only person who can create or change anything.
+- **Public visitors** (Phase 2) — reach a finished trip only through its unguessable share link and see a **read-only** rendering: no edit controls, no login.
 
-## Core Problem Being Solved
+## Core Problem
 
-<!-- FILL IN: What manual or broken process does this project replace or improve? -->
+Off-the-shelf journaling and photo tools show trips as flat grids or generic timelines — they don't convey the *feeling of a journey unfolding*. Wanderline turns a trip into a scroll-driven visual narrative that the owner is proud to send to friends and family, while keeping authoring simple, robust, and non-destructive.
 
 ## Success Criteria
 
-<!-- FILL IN: How do we know the project is working? List 3-5 measurable outcomes. -->
+- [ ] The owner can log in with a password, and an unauthenticated visitor is redirected away from every editing surface.
+- [ ] The owner can create a trip and add at least three **ordered** stops, each with a location (set via place-search, map-click, or manual entry), a date/time, a caption, and at least one uploaded photo — and can reorder the stops.
+- [ ] Every uploaded photo is stored on local disk in two derived sizes (web-optimized + thumbnail) with the original retained, via a storage interface that can later be swapped for R2/S3 with no call-site changes.
+- [ ] Opening a trip's **story view** renders the serpentine path drawing itself on scroll, stops animating into view, and cover photos with parallax — all driven by real data, not fixtures.
+- [ ] The app boots on **port 8001**, `GET /health` returns HTTP 200 with JSON, and the Playwright smoke walks login → create trip → add stop with photo → open story and asserts the serpentine path + a stop + a photo actually render (not just a 200).
 
-- [ ] <!-- criterion 1 -->
-- [ ] <!-- criterion 2 -->
-- [ ] <!-- criterion 3 -->
+## Out of Scope
 
-## What This Project Does NOT Do (Out of Scope)
-
-<!-- FILL IN: Explicit exclusions prevent scope creep. List things the project will never do. -->
+- **No AI / no LLM / no agent framework** — this is a pure CRUD + media web app (see `agent.md`).
+- No multi-user accounts, roles, sharing between owners, or comments. Exactly one owner, one password.
+- No branching journeys — a trip is **one ordered sequence** of stops (branching is an explicit non-goal, not even a later phase).
+- No native mobile app; responsive web only.
+- No real-time collaboration or concurrent editing.
+- No server-side rendering of maps or tiles; maps use OpenStreetMap tiles client-side.
+- Deferred to later phases (built as **clearly-labelled "coming soon" stubs** in Phase 1, never as broken UI): public share link, real-map overview toggle, mood/activity tags + filtering, cloud (R2/S3) photo storage, EXIF auto-location, rich (markdown) blog entries, PDF export.
 
 ## Key Constraints
 
-<!-- FILL IN: Hard limits — budget, latency, compliance, API rate limits, etc. -->
+- **Stack is fixed** (see `architecture.md#stack`): Next.js full-stack (App Router, TypeScript), SQLite via Prisma (SQLite **is** the production DB here — authoritative, not a substitute), Framer Motion + SVG + react-leaflet for the visuals, `sharp` for photos, `pnpm`. No separate backend service. The Python/LangGraph boilerplate baseline **does not apply** and is superseded.
+- **Port 8001** for dev and start; live URL `http://localhost:8001`. `GET /health` must return 200 + JSON.
+- **Must boot without secrets.** The app must start for local testing even if `OWNER_PASSWORD` / `SESSION_SECRET` are unset — safe dev defaults apply with a visible warning. To secure a real deployment the owner sets **`OWNER_PASSWORD`** (and `SESSION_SECRET`). See `architecture.md#external-dependencies` and `.env.example`.
+- **No cloud credentials required in Phase 1** — photos live on local disk behind a storage interface designed for a later R2/S3 swap.
+- **Nominatim usage policy** — geocoding is proxied server-side with a proper `User-Agent`, debounced client-side, kept to low personal-use volume (see `capabilities/stop-location.md`).
+- **Non-destructive editing** — autosave-on-blur plus explicit save; never silently lose owner data.
+- **Styled render** — the Phase-1 gate asserts the built Tailwind CSS contains real utility selectors (no unexpanded `@tailwind`).
+
+---
 
 ## Phases of Development
 
-<!-- FILL IN: The spec-writer fills these in. One phase = one user-testable increment, behind a human testing gate. Default each phase's slices to INDEPENDENT so generators build them concurrently; declare a dependency only when a slice truly needs another's output. Use the per-phase template below — one block per phase. -->
+> **Phase 1 is the smallest first-time-right user-testable win.** Real on the one core path (login → trip → ordered stops with location + photo → animated story view); everything else ships as clearly-labelled "coming soon" stubs that can never be mistaken for bugs. Later phases wire those stubs into real features.
 
-> **Phase 1 is the smallest first-time-right user-testable win.** It must work perfectly the first time the user tests it — zero rough edges on the tested path. Its backend is minimal but REAL on the one core path (no fake data on the tested path). Its frontend is visually complete: real UI for the one working path PLUS clearly-labelled NON-FUNCTIONAL stubs for everything coming later, so the user sees the vision (a stub must never be mistaken for a bug). Each later phase wires those stubs into real functionality, one increment at a time.
+All slices own **disjoint file paths** so `project-builder` can fan out one `code-generator` per slice concurrently. The only cross-slice coupling is a **contract dependency**: the API slice imports the foundation slice's frozen module signatures (`architecture.md#module-contracts`), and the two frontend slices code against the `api.md` contract. These are not build-order dependencies for authoring — every slice authors against signatures frozen in the spec, and all slices are present before the gate runs `pnpm build`.
 
-### Phase 1 — <!-- short name -->
+### Phase 1 — The Living Story
 
-- **Goal:** <!-- FILL IN: the single smallest user-testable win this phase delivers. -->
-- **Independent slices (parallel build units):** <!-- FILL IN: each slice is a disjoint unit a single generator owns. Note its surface (frontend / backend) and any declared dependency on another slice (default: none). -->
-  - `slice-a` (backend) — <!-- what it builds; deps: none -->
-  - `slice-b` (frontend) — <!-- what it builds; deps: none -->
-- **Key surfaces / files:** <!-- FILL IN: the files/dirs each slice touches. frontend writes the frontend surface; backend writes src/. Never the same file. -->
-- **Gate command:** <!-- FILL IN: one exact runnable command that proves the phase works — real LLM/API via .env keys, production DB driver (never SQLite-as-substitute). e.g. `uv run pytest tests/test_phase1.py` -->
-- **How the user tests it (handoff seed):** <!-- FILL IN: exact run command(s), what to click / look at, the expected result, and which parts are labelled stubs vs real. -->
+- **Goal:** The owner logs in, creates a trip, adds a few **ordered** stops (each with a location set via place-search or map-click, a date/time, a caption, and at least one uploaded photo that is resized + thumbnailed on local disk), then opens the trip in the **animated serpentine story view** where the path draws itself on scroll, stops animate in, and cover photos have parallax.
 
-### Phase 2 — <!-- short name -->
-
-- **Goal:** <!-- FILL IN: next user-testable increment (typically wires a Phase-1 stub into real functionality). -->
 - **Independent slices (parallel build units):**
-  - `slice-a` (backend) — <!-- ...; deps: none -->
-  - `slice-b` (frontend) — <!-- ...; deps: none -->
-- **Key surfaces / files:** <!-- FILL IN -->
-- **Gate command:** <!-- FILL IN: exact runnable command, real LLM/API + production DB driver -->
-- **How the user tests it (handoff seed):** <!-- FILL IN -->
+  - `slice-foundation` (backend/infra) — project scaffold + all shared config + data + storage + shell. Owns `package.json`, `next.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `postcss.config.mjs`, `.env.example`, `.gitignore`, `playwright.config.ts`, `prisma/` (schema + initial migration), `src/lib/db.ts`, `src/lib/env.ts`, `src/lib/logger.ts`, `src/lib/storage/**` (interface + LocalDiskStorage), `src/lib/photos.ts` (sharp pipeline), `src/lib/api-client.ts` (typed fetch wrappers), `src/app/layout.tsx`, `src/app/globals.css`, `src/app/health/route.ts`, `src/app/api/media/[...key]/route.ts`. **Deps: none.**
+  - `slice-api` (backend) — every feature route handler + auth. Owns `src/middleware.ts`, `src/lib/auth.ts`, `src/lib/session.ts`, `src/lib/geocode.ts`, `src/app/api/auth/**`, `src/app/api/trips/**`, `src/app/api/stops/**`, `src/app/api/photos/**`, `src/app/api/geocode/**`, and `tests/e2e/api.smoke.spec.ts`. **Deps: contract-only** — imports `slice-foundation` modules by the frozen signatures in `architecture.md#module-contracts`.
+  - `slice-editor` (frontend) — login + owner home + trip editor + location picker + photo uploader. Owns `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/trips/new/page.tsx`, `src/app/trips/[tripId]/edit/**`, `src/components/editor/**`, `src/components/map/**`, `src/components/photos/**`, `src/components/ui/**`, and `tests/e2e/editor.spec.ts`. **Deps: contract-only** — codes against `api.md`; imports `src/lib/api-client.ts` by its frozen signature.
+  - `slice-story` (frontend) — the serpentine reading view. Owns `src/app/trips/[tripId]/story/**`, `src/components/story/**`, and `tests/e2e/story.spec.ts`. **Deps: contract-only** — codes against `api.md`; imports `src/lib/api-client.ts`.
 
-<!-- Repeat the per-phase block for every phase. -->
+  Route-collision check: `layout.tsx`/`globals.css`/`page.tsx` are single files owned by exactly one slice; `src/app/trips/[tripId]/edit/**` (editor) and `src/app/trips/[tripId]/story/**` (story) are disjoint child segments with **no shared `[tripId]/layout.tsx`**. No two slices write the same file.
 
+- **Key surfaces / files:** `prisma/schema.prisma`; `src/lib/storage/*`, `src/lib/photos.ts`; `src/middleware.ts`, `src/app/api/**`; `src/app/login`, `src/app/trips/[tripId]/edit`, `src/components/editor`; `src/app/trips/[tripId]/story`, `src/components/story`; `src/app/health/route.ts`.
+
+- **Gate command (single runnable command from repo root):**
+  ```
+  pnpm install && pnpm prisma migrate deploy && pnpm build && pnpm exec playwright test
+  ```
+  `playwright.config.ts` declares a `webServer` that runs `pnpm start` (→ `next start -p 8001`) and waits for `http://localhost:8001/health` to return 200 before the specs run — so this one command proves: migration applies to the SQLite prod DB, the app builds, it boots on **8001**, `/health` is 200 JSON, and the smokes assert the real journey. The gate runs against `file:./dev.db` (the production DB) and the real Nominatim service. `package.json` exposes it as `pnpm gate`.
+  - Assertions inside the smokes (not just HTTP 200): login sets a session cookie and redirects into the app; creating a trip + stop + uploading a real JPEG fixture yields a `webUrl` whose `<img>` reports `naturalWidth > 0`; the story page contains an `svg path[data-serpentine]` whose `stroke-dashoffset` changes between top-of-page and scrolled; at least one stop card becomes visible on scroll; a known Tailwind-styled element reports a non-default computed style (proves the CSS bundle expanded — no unexpanded `@tailwind`).
+
+- **How the user tests it (handoff seed):**
+  1. From the repo root run `pnpm install`, then `pnpm prisma migrate deploy`, then `pnpm dev`. Open `http://localhost:8001`.
+  2. You are redirected to `/login`. A yellow banner warns you are using the **dev default password** (`letmein`) because `OWNER_PASSWORD` is unset. Type `letmein`, click **Enter**. (To secure it later, set `OWNER_PASSWORD` in `.env`.)
+  3. On the home page click **New trip**, give it a title. In the editor click **Add stop**: pick a location via the **Search** tab (type e.g. "Kyoto", choose a candidate) *or* the **Map** tab (click the map to drop a pin). Set a date/time. Drag-drop or select a **photo** (any large phone JPEG is fine). Add a caption. Add **two more stops** the same way. Use the **↑ / ↓** buttons to reorder them.
+  4. Click **View story**. Scroll slowly: the winding path should **draw itself** as you scroll, each stop should **animate in**, the cover photo should **drift with parallax**, and a **marker** should travel down the path.
+  5. **Real in this phase:** login/session, trip + stop create/edit/reorder, location via search + map-click + manual, photo upload with resize + thumbnail on disk, the serpentine story view.
+  6. **Labelled "coming soon" stubs (expected, not bugs):** the **Share link** button, the **Map overview** toggle on the story, the **Tags** section, **EXIF auto-location**, **Cloud storage**, and **Export** — each renders a visible "coming soon" pill and is inert.
+
+### Phase 1.5 — Story Themes
+
+- **Goal:** The owner picks a **story theme** per trip in the editor (four looks: **cinematic** default, **editorial**, **minimal**, **vintage**) and the serpentine story view renders in that theme. Every theme fixes the shipped view's five weaknesses — dense spacing (down from the too-airy ~560px/segment), premium cards, larger photos, a filled/textured background, refined type + per-theme path/marker — while the **signature serpentine draw-on-scroll and traveling marker stay present and functional in all four**. Purely additive to shipped Phase 1: no capability is removed, no AI is introduced. See [`capabilities/story-themes.md`](capabilities/story-themes.md).
+
+- **Independent slices (parallel build units — DISJOINT file paths, fan out one `code-generator` each):**
+  - `slice-theme-data-api` (backend) — the `theme` column, migration, API, and the frozen api-client type. **Owns ONLY:** `prisma/schema.prisma` (add `theme String @default("cinematic")` to `Trip`); a new **additive** migration `prisma/migrations/<timestamp>_trip_theme/migration.sql` (pure `ALTER TABLE "Trip" ADD COLUMN "theme" TEXT NOT NULL DEFAULT 'cinematic'` — backfills existing rows, **no** table reset / data loss); `src/app/api/trips/route.ts` (create accepts optional `theme` zod-enum-validated + defaults `cinematic`; list returns `theme`); `src/app/api/trips/[tripId]/route.ts` (get returns `theme`; patch accepts optional `theme` zod-enum-validated, 400 on unknown); `src/lib/api-client.ts` (add `export type StoryTheme`, and `theme` on `Trip`/`TripSummary`/`CreateTripInput`/`TripPatch`). **Deps: none.**
+  - `slice-theme-editor` (frontend) — the theme picker. **Owns ONLY:** `src/components/editor/ThemePicker.tsx` (new; four swatches/labels, live-saves via `updateTrip(tripId, { theme })`, uses **inline styles** for swatch colors — does **not** edit `tailwind.config.ts`), wires it into `src/app/trips/[tripId]/edit/page.tsx`, and `tests/e2e/theme-editor.spec.ts` (new; picks a non-default theme, reloads, asserts persistence). **Deps: contract-only** — imports `StoryTheme`/`Trip` from `src/lib/api-client.ts` per the frozen contract (`architecture.md#module-contracts`); does not write it.
+  - `slice-theme-story` (frontend, largest) — the themed story render. **Owns ONLY:** `src/components/story/**` (introduce `themes/` — one module per theme supplying palette/typography/background/card/path+marker treatment + a densified segment height; make `StoryView`/`StopCard`/`serpentine` theme-aware; render `data-theme` + the filled themed background on the story root), `src/app/trips/[tripId]/story/page.tsx`, and — **sole editor this phase** — `tailwind.config.ts` + `src/app/globals.css`. Updates `tests/e2e/story.spec.ts` **in place** (keeps every Phase-1 serpentine/marker/parallax/card/reduced-motion assertion, adds theme assertions). Materially reduces dead vertical space (target ~380–440px/segment, tuned so cards never overlap), premium cards, larger photos, filled backgrounds, refined type + per-theme path/marker. **Deps: contract-only** — imports `StoryTheme`/`Trip` from `src/lib/api-client.ts`.
+
+  > **Disjoint-file confirmation:** `slice-theme-data-api` owns schema + migration + the two `api/trips` route files + `src/lib/api-client.ts`. `slice-theme-editor` owns `src/components/editor/ThemePicker.tsx` + the edit page + `theme-editor.spec.ts`. `slice-theme-story` owns `src/components/story/**` + the story page + `story.spec.ts` + `tailwind.config.ts` + `globals.css`. **No two slices write the same file.** `src/lib/api-client.ts` is written **only** by `slice-theme-data-api`; both frontend slices import from it (contract dependency, not a write). `tailwind.config.ts`/`globals.css` are written **only** by `slice-theme-story`. The edit page (`slice-theme-editor`) and the story page (`slice-theme-story`) are disjoint route segments.
+
+- **Key surfaces / files:** `prisma/schema.prisma` + `prisma/migrations/<ts>_trip_theme/`; `src/app/api/trips/route.ts`, `src/app/api/trips/[tripId]/route.ts`, `src/lib/api-client.ts`; `src/components/editor/ThemePicker.tsx`; `src/components/story/themes/**`, `src/components/story/StoryView.tsx`, `src/components/story/StopCard.tsx`, `src/components/story/serpentine.ts`, `tailwind.config.ts`, `src/app/globals.css`.
+
+- **Gate command (single runnable command from repo root):**
+  ```
+  pnpm install && pnpm prisma migrate deploy && pnpm build && pnpm exec playwright test
+  ```
+  Runs against the existing `file:./dev.db` (the production DB) and real services via `playwright.config.ts`'s `webServer` (`pnpm start` on **8001**, `/health` readiness). **The gate must prove:**
+  - **Additive migration applies non-destructively:** `pnpm prisma migrate deploy` applies the new migration to the existing `file:./dev.db` with no reset; the migration SQL is a pure additive `ADD COLUMN ... DEFAULT 'cinematic'`; a trip created **without** a theme reads back `theme: "cinematic"` (existing rows backfilled to `cinematic`).
+  - **Build is clean:** `pnpm build` succeeds with **0 TypeScript errors**.
+  - **All prior Phase-1 E2E still pass, un-weakened:** `api.smoke.spec.ts`, `editor.spec.ts`, and `story.spec.ts` keep their existing assertions — the serpentine draw-on-scroll (`svg path[data-serpentine]` dashoffset shrinks on scroll), the traveling marker advancing (`[data-story-marker]`), cover parallax (`[data-cover-photo]` transform changes), a stop card animating from hidden→visible (`[data-stop-card]`), the Tailwind-expanded computed-style check, and reduced-motion (path fully drawn + cards visible). **No assertion is weakened to pass.**
+  - **New story assertions (added to `story.spec.ts`, not replacing):**
+    - the default trip's story root renders `[data-theme="cinematic"]`;
+    - a theme-signature element `[data-theme-signature]` is present in the rendered story;
+    - the cover photo's (`[data-cover-photo]`) rendered box is materially larger than a thumbnail — assert a real min rendered width **> 340px** (cinematic default aims much larger / near-full-bleed);
+    - the story root's **computed background** is non-default (not blank white, not `rgba(0,0,0,0)`, not `none`);
+    - **all four** themes render their `data-theme` value + `[data-theme-signature]` when applied via the API seed (loop: `PATCH /api/trips/:id { theme }` for each of the four, reload the story, assert the root `data-theme` and the signature element per theme).
+  - **New editor assertion (`tests/e2e/theme-editor.spec.ts`):** picking a **non-default** theme in the editor persists it — after a reload, the picker shows the chosen theme selected and `GET /api/trips/:id` returns it.
+
+- **How the user tests it (handoff seed):**
+  1. From the repo root run `pnpm prisma migrate deploy` (applies the additive `theme` column to your existing `dev.db` — your trips are preserved and default to **cinematic**), then `pnpm build` and `pnpm start` (serves on **8001**).
+  2. Open a trip in the editor. Near the trip header you now have a **Story theme** picker with four swatches: **Cinematic**, **Editorial**, **Minimal**, **Vintage**. Pick one — it saves immediately (watch the "Saved ✓" indicator).
+  3. Click **View story**. For each theme, go back to the editor, pick a different theme, and re-open the story. Confirm the look changes per theme: photos are **large**, the background is **filled/textured** (not blank), spacing between stops is **tight** (no big dead gaps), and — in every theme — the **serpentine still draws itself on scroll** with the marker travelling the route.
+  4. **Real in this phase:** the four story themes + the editor theme picker, persisted per trip on the existing DB.
+  5. **Still labelled "coming soon" stubs (expected, not bugs):** the **Share link** button, the **Map overview** toggle, the **Tags** section, **EXIF auto-location**, **Cloud storage**, and **Export** (Phases 2–3).
+
+### Phase 2 — Publish, Map & Tags
+
+- **Goal:** The owner publishes a trip to get an **unguessable public share link** that renders the same story **read-only** with no edit controls; turns on a **real-map overview** (Leaflet + OSM pins connected by a route line) toggleable from the story; and organizes stops with **mood/activity tags** that filter the editor and story. Wires three Phase-1 stubs into real features.
+
+- **Independent slices (parallel build units):**
+  - `slice-publish` (backend) — publish/unpublish + public read API. Owns `src/app/api/trips/[tripId]/publish/**`, `src/app/api/public/**`, and the public-read branch of session/middleware exemptions in `src/middleware.ts` (contract: coordinates the one shared middleware edit with `slice-tags` via a declared merge point — see deps). Adds `shareSlug` handling. **Deps: none** on other Phase-2 slices except the shared `middleware.ts` note below.
+  - `slice-tags` (backend) — tag model + tag CRUD + filter query params on trip/stop reads. Owns `src/app/api/tags/**`, `src/app/api/stops/[stopId]/tags/**`, and the Phase-2 additive Prisma migration (`prisma/migrations/*_tags_and_publish`). **Deps: none.** `Assumed:` the single additive migration that adds both `shareSlug` publish fields and the `Tag`/`StopTag` tables is owned by `slice-tags` to avoid two slices writing migration files; `slice-publish` codes against those columns as frozen in `data.md`.
+  - `slice-public-ui` (frontend) — public read-only story route + published-state affordances. Owns `src/app/s/[slug]/**`, `src/components/share/**`, `tests/e2e/public.spec.ts`. **Deps: contract-only** (`api.md`).
+  - `slice-map-ui` (frontend) — real-map overview panel + tag filter UI. Owns `src/components/mapoverview/**`, `src/components/tags/**`, `tests/e2e/map-tags.spec.ts`, and wires the existing story/editor stub toggles (its own components only). **Deps: contract-only** (`api.md`).
+
+  > **Declared dependency:** `src/middleware.ts` is touched by `slice-publish` only (to exempt `/s/**` and `/api/public/**` from owner auth). `slice-tags` does **not** edit middleware. This keeps the one shared root file single-owner.
+
+- **Key surfaces / files:** `src/app/s/[slug]`, `src/app/api/public`, `src/app/api/trips/[tripId]/publish`, `src/app/api/tags`, `Tag`/`StopTag` models, `src/components/mapoverview`, `src/components/tags`.
+
+- **Gate command:**
+  ```
+  pnpm prisma migrate deploy && pnpm build && pnpm exec playwright test tests/e2e/public.spec.ts tests/e2e/map-tags.spec.ts
+  ```
+  Runs against `file:./dev.db` and real OSM tiles/Nominatim. Assertions: publishing a trip returns a slug of ≥ 24 random chars; opening `/s/<slug>` in a **fresh browser context with no session cookie** renders the story and asserts **no edit controls / no "Add stop" button** are present; the map overview panel renders a Leaflet container with one marker per stop and a polyline; applying a tag filter hides non-matching stops in both editor and story.
+
+- **How the user tests it (handoff seed):** Log in, open a trip, click **Publish** — copy the generated link, open it in a private/incognito window: you see the story with **no** edit controls and cannot log in from it. On the story, toggle **Map overview** — a real OpenStreetMap map appears with a pin per stop joined by a line. In the editor, add **tags** (e.g. `hiking`, `food`) to stops and use the **filter** to show only matching stops. Still stubbed: cloud storage, EXIF, rich entries, export.
+
+### Phase 3 — Cloud Storage, Smart Import & Export
+
+- **Goal:** Photos can be stored in **Cloudflare R2 / S3** by flipping an env var (same storage interface, no call-site changes); newly uploaded photos **auto-suggest their location and time from EXIF** GPS metadata; stop entries become **rich markdown**; and a trip can be **exported to a shareable PDF**. Turns the remaining Phase-1 stubs real; this is the final requirements phase (every capability active).
+
+- **Independent slices (parallel build units):**
+  - `slice-cloud-storage` (backend) — `R2Storage` implementing the `PhotoStorage` interface + backend selection by env. Owns `src/lib/storage/r2.ts`, `src/lib/storage/index.ts` (selector), `tests/storage.contract.test.ts`. **Deps: none** (implements the frozen interface from Phase 1). `Assumed:` R2 is exercised for real only when `R2_*` env vars are set; otherwise the contract test runs against LocalDiskStorage — both satisfy the same assertions.
+  - `slice-exif` (backend) — EXIF GPS + timestamp extraction on upload. Owns `src/lib/exif.ts`, extends the photo-upload response with `suggestedLat/Lng/OccurredAt`, `tests/exif.test.ts`. **Deps: none.**
+  - `slice-rich-export` (backend) — markdown storage/render helpers + PDF export route. Owns `src/lib/markdown.ts`, `src/app/api/trips/[tripId]/export/**`, `tests/export.test.ts`. **Deps: none.**
+  - `slice-phase3-ui` (frontend) — EXIF "use suggested location" prompt, markdown editor + preview, export button. Owns `src/components/richtext/**`, `src/components/exif/**`, `src/components/export/**`, `tests/e2e/phase3.spec.ts`. **Deps: contract-only** (`api.md`).
+
+- **Key surfaces / files:** `src/lib/storage/r2.ts`, `src/lib/storage/index.ts`, `src/lib/exif.ts`, `src/lib/markdown.ts`, `src/app/api/trips/[tripId]/export`, `src/components/richtext`, `src/components/exif`.
+
+- **Gate command:**
+  ```
+  pnpm prisma migrate deploy && pnpm build && pnpm vitest run tests/storage.contract.test.ts tests/exif.test.ts tests/export.test.ts && pnpm exec playwright test tests/e2e/phase3.spec.ts
+  ```
+  The storage contract test runs against whichever backend `PHOTO_STORAGE_BACKEND` selects (real R2 when `R2_*` is set in `.env`; else local — both must pass identical assertions: `save` then `url` yields a fetchable object, `delete` removes it). EXIF test uses a real fixture JPEG carrying GPS EXIF and asserts extracted lat/lng within tolerance. Export test asserts a non-empty `application/pdf` byte stream containing the trip title.
+
+- **How the user tests it (handoff seed):** (Optional) set `PHOTO_STORAGE_BACKEND=r2` and the `R2_*` vars in `.env`, restart — uploads now land in R2 and still display. Upload a photo taken on a phone with location on: the editor prompts "Use photo's location/time?" and pre-fills the pin and date. Write a stop entry with **markdown** (headings, bold, lists) and see it rendered in the story. Click **Export PDF** on a trip and open the downloaded file. Nothing remains stubbed.

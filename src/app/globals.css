@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Lean base layer: paper canvas + smooth scroll for the story's draw-on-scroll. */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: theme(colors.paper);
+    color: theme(colors.ink);
+  }
+}
+
+/* Respect reduced-motion: no smooth scroll-jacking. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

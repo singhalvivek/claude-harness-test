@@ -1,0 +1,14 @@
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  sharp: true
+# pnpm 11 reads build-script allow-list and other settings from here (no longer
+# from the "pnpm" field in package.json). This is a single-package project, so
+# there is no `packages:` list — only the settings pnpm needs.
+onlyBuiltDependencies:
+  - sharp
+  - '@prisma/client'
+  - prisma
+  - '@prisma/engines'
+  - esbuild
