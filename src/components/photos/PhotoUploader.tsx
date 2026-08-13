@@ -6,7 +6,7 @@ import {
   reorderPhotos,
   setCover,
   updatePhoto,
-  uploadPhotos,
+  uploadPhotoDirect,
   type Photo,
 } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
@@ -50,7 +50,9 @@ export function PhotoUploader({
     };
     setUploads((prev) => [...prev, item]);
     try {
-      await uploadPhotos(stopId, [file]);
+      // Direct-to-storage upload (presign → PUT → complete) so full-resolution
+      // originals of any size work, bypassing the serverless body-size limit.
+      await uploadPhotoDirect(stopId, file);
       await refresh();
       setUploads((prev) => prev.filter((u) => u.id !== item.id));
     } catch (err) {

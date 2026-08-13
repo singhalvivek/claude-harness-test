@@ -4,7 +4,7 @@
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { env } from "@/lib/env";
-import type { PhotoStorage, SavedObject } from "./types";
+import type { PhotoStorage, PresignedUpload, SavedObject } from "./types";
 
 export class LocalDiskStorage implements PhotoStorage {
   private readonly baseDir: string;
@@ -33,5 +33,11 @@ export class LocalDiskStorage implements PhotoStorage {
 
   url(key: string): string {
     return `/api/media/${key}`;
+  }
+
+  async presignUpload({ key }: { key: string; contentType: string }): Promise<PresignedUpload> {
+    // Same-origin receiver route that writes to disk (owner-gated by middleware).
+    const encoded = key.split("/").map(encodeURIComponent).join("/");
+    return { url: `/api/uploads/${encoded}`, method: "PUT" };
   }
 }
