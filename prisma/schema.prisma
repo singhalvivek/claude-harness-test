@@ -45,6 +45,12 @@ model Stop {
   // + a card accent. One of: none (default) | flower | mountain | tree | train |
   // plane | boat | car | tent | camera | star | compass | sun | heart.
   motif             String    @default("none")
+  // Phase 2.5 — one short line of how this stop FELT, rendered as a themed quote
+  // in the story. Max 200 chars (zod at the API boundary); blank -> null.
+  feeling           String?
+  // "card" (own beat on the serpentine) | "inline" (pull-quote in the stop card)
+  // | "none" (kept but hidden).
+  feelingPlacement  String    @default("card")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -54,15 +60,25 @@ model Stop {
   @@unique([tripId, order])
 }
 
+// Domain concept: MEDIA — a photo OR a video. The table name intentionally stays
+// `Photo` (no rename migration, no data loss); Phase 2.5 discriminates the row by
+// `kind` so a video reuses the identical ordering / cover / caption / reorder /
+// delete logic. There is deliberately NO parallel `Video` model.
 model Photo {
   id          String   @id @default(cuid())
   stopId      String
   stop        Stop     @relation(fields: [stopId], references: [id], onDelete: Cascade)
   order       Int
   isCover     Boolean  @default(false)
+  // "photo" | "video" — the media discriminator; every pre-2.5 row backfills to "photo".
+  kind        String   @default("photo")
   webKey      String
   thumbKey    String
   originalKey String
+  // video only: the client-captured poster JPEG at .../<uuid>/poster.jpg
+  posterKey   String?
+  // video only: seconds, read from <video>.duration in the BROWSER (no ffmpeg).
+  durationSec Float?
   width       Int
   height      Int
   caption     String?

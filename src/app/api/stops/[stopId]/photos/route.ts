@@ -1,5 +1,11 @@
-// POST /api/stops/:stopId/photos — multipart upload → sharp derivatives → rows.
-// Owner only.
+// POST /api/stops/:stopId/photos — LEGACY multipart upload, IMAGES ONLY.
+// multipart → sharp derivatives → rows. Owner only.
+//
+// This is the only route that runs `processUpload` (sharp). Phase 2.5 therefore
+// branches on MIME/extension BEFORE `processUpload` is reached and returns 415
+// for any video part: sharp throws on video bytes, so video must never get that
+// far. Videos use the direct path (presign → PUT → complete), which never calls
+// sharp at all. Kept because the Phase-1 smoke tests upload through here.
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,6 +15,7 @@ import { storage } from "@/lib/storage";
 import { processUpload } from "@/lib/photos";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
+import type { MediaKind } from "@/lib/api-client";
 
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB per file
 const ALLOWED_MIME = new Set([
@@ -21,9 +28,27 @@ const ALLOWED_MIME = new Set([
 ]);
 const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "heic", "heif"]);
 
+// Any of these — by MIME or by extension — is routed away from sharp with 415.
+const VIDEO_EXT = new Set(["mp4", "mov", "webm", "m4v", "avi", "mkv", "hevc"]);
+
+const VIDEO_REDIRECT_MESSAGE =
+  "video uploads must use the direct upload path (presign → PUT → complete)";
+
 function extOf(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
+}
+
+/** `video/mp4;codecs=avc1` → `video/mp4`. */
+function baseMime(contentType: string): string {
+  return (contentType || "").split(";")[0]!.trim().toLowerCase();
+}
+
+/** True for anything that looks like video — checked BEFORE sharp sees a byte. */
+function isVideoPart(file: File): boolean {
+  const mime = baseMime(file.type);
+  if (mime.startsWith("video/")) return true;
+  return VIDEO_EXT.has(extOf(file.name));
 }
 
 function isSupported(file: File): boolean {
@@ -37,8 +62,11 @@ function serializePhoto(p: Photo) {
     id: p.id,
     order: p.order,
     isCover: p.isCover,
+    kind: p.kind as MediaKind,
     webUrl: storage.url(p.webKey),
     thumbUrl: storage.url(p.thumbKey),
+    posterUrl: p.posterKey ? storage.url(p.posterKey) : null,
+    durationSec: p.durationSec,
     width: p.width,
     height: p.height,
     caption: p.caption,
@@ -70,6 +98,15 @@ async function handlePost(
   const files = form.getAll("files").filter((v): v is File => v instanceof File);
   if (files.length === 0) {
     return NextResponse.json({ error: "no files provided" }, { status: 400 });
+  }
+
+  // VIDEO GUARD — first, before ANY byte is read and long before `processUpload`
+  // (sharp) is reached. sharp throws on a video buffer, so this branch is what
+  // keeps video out of the image pipeline entirely. No row is created.
+  for (const file of files) {
+    if (isVideoPart(file)) {
+      return NextResponse.json({ error: VIDEO_REDIRECT_MESSAGE }, { status: 415 });
+    }
   }
 
   // Validate the whole batch up-front so a bad file writes nothing.

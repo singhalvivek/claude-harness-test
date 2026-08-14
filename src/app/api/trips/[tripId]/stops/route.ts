@@ -7,7 +7,26 @@ import type { Stop } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
-import { MOTIF_IDS } from "@/lib/api-client";
+import { MOTIF_IDS, MAX_FEELING_CHARS } from "@/lib/api-client";
+import type { FeelingPlacement } from "@/lib/api-client";
+
+// Frozen FeelingPlacement enum (spec/api.md + spec/capabilities/feeling-cards.md).
+const FEELING_PLACEMENTS = ["card", "inline", "none"] as const;
+const feelingPlacementEnum = z.enum(FEELING_PLACEMENTS);
+
+/** Unknown/absent placement falls back to "card" (feeling-cards.md). */
+function readPlacement(value: unknown): FeelingPlacement {
+  return (FEELING_PLACEMENTS as readonly string[]).includes(value as string)
+    ? (value as FeelingPlacement)
+    : "card";
+}
+
+/** Blank/whitespace-only feeling is not a feeling — it normalises to null. */
+function normalizeFeeling(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 const createSchema = z.object({
   title: z.string().optional(),
@@ -19,6 +38,10 @@ const createSchema = z.object({
   body: z.string().optional(),
   // Unknown motif → zod parse fails → 400. Omitted → DB default "none".
   motif: z.enum(MOTIF_IDS).optional(),
+  // Over MAX_FEELING_CHARS → 400; blank → normalised to null below.
+  feeling: z.string().max(MAX_FEELING_CHARS).nullable().optional(),
+  // Unknown placement → 400. Omitted → DB default "card".
+  feelingPlacement: feelingPlacementEnum.optional(),
 });
 
 function serializeNewStop(s: Stop) {
@@ -33,7 +56,11 @@ function serializeNewStop(s: Stop) {
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
     motif: s.motif,
+    feeling: normalizeFeeling(s.feeling),
+    feelingPlacement: readPlacement(s.feelingPlacement),
     tags: [] as never[],
+    // A new stop has no media yet; items gain the full media shape
+    // (kind/posterUrl/durationSec) once read back through GET /api/trips/:id.
     photos: [] as never[],
   };
 }
@@ -81,6 +108,10 @@ async function handlePost(
       body: d.body,
       // undefined → Prisma applies the column default "none".
       motif: d.motif ?? undefined,
+      // Only set when the caller sent it; omitted → column defaults
+      // (feeling NULL / feelingPlacement "card").
+      feeling: d.feeling !== undefined ? normalizeFeeling(d.feeling) : undefined,
+      feelingPlacement: d.feelingPlacement ?? undefined,
     },
   });
 

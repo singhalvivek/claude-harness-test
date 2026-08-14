@@ -17,7 +17,15 @@ import {
 import type { Trip } from "@/lib/api-client";
 import { hasMotif } from "@/components/motifs/catalog";
 import { StopCard } from "./StopCard";
-import { buildGeometry, serpentinePathD, nodeAnchors } from "./serpentine";
+import { FeelingCard } from "./FeelingCard";
+import {
+  buildBeatGeometry,
+  buildBeats,
+  feelingTextOf,
+  nodeAnchors,
+  rendersFeelingInline,
+  serpentinePathD,
+} from "./serpentine";
 import { getTheme } from "./themes";
 import { AmbientDecor } from "./AmbientDecor";
 import { StopMotifOrnament } from "./StopMotifOrnament";
@@ -46,9 +54,29 @@ export function StoryView({ trip }: { trip: Trip }) {
   const [pathLen, setPathLen] = useState(0);
 
   const stops = trip.stops;
-  const geom = buildGeometry(width, stops.length, theme.segmentHeight);
+
+  // The path is built from an ordered list of BEATS, not stops: a stop whose
+  // feeling is non-blank with placement "card" contributes a second beat right
+  // after its own, so its feeling card stands on the path opposite it and the
+  // path, the marker and the total track height all flow through it. Beats have
+  // heterogeneous heights (a feeling card has no photo, so it is shorter) and a
+  // stop carrying an inline pull-quote is allotted extra room.
+  const beats = buildBeats(stops);
+  const geom = buildBeatGeometry(width, beats, {
+    segmentHeight: theme.segmentHeight,
+    feelingSegmentHeight: theme.feeling.segmentHeight,
+    inlineExtra: theme.feeling.inlineExtraHeight,
+    hasInline: (stopIndex) => {
+      const s = stops[stopIndex];
+      return Boolean(s) && rendersFeelingInline(s);
+    },
+  });
   const d = serpentinePathD(geom);
   const anchors = nodeAnchors(geom);
+  // Motif ornaments pin to the STOP beat's node, never a feeling beat's.
+  const stopAnchors = new Map(
+    anchors.filter((a) => a.kind === "stop").map((a) => [a.stopIndex, a]),
+  );
 
   // Crown the closing block with the last motif'd stop's motif (a personal
   // touch), falling back to a star flourish when no stop carries a motif.
@@ -218,9 +246,27 @@ export function StoryView({ trip }: { trip: Trip }) {
           </div>
         </motion.div>
 
-        {/* Stop cards anchored along the path, order-ascending, alternating side. */}
-        {stops.map((stop, i) => {
-          const anchor = anchors[i];
+        {/* One card per BEAT along the path, order-ascending, alternating side:
+            a stop card, or that stop's standalone feeling card. */}
+        {anchors.map((anchor) => {
+          const stop = stops[anchor.stopIndex];
+          if (!stop) return null;
+          if (anchor.kind === "feeling") {
+            const text = feelingTextOf(stop);
+            if (!text) return null;
+            return (
+              <FeelingCard
+                key={`feeling-${stop.id}`}
+                text={text}
+                stopId={stop.id}
+                side={anchor.side}
+                top={anchor.cy}
+                reduce={reduce}
+                theme={theme}
+                accent={accent}
+              />
+            );
+          }
           return (
             <StopCard
               key={stop.id}
@@ -229,25 +275,27 @@ export function StoryView({ trip }: { trip: Trip }) {
               top={anchor.cy}
               reduce={reduce}
               card={theme.card}
+              feeling={theme.feeling}
               accent={accent}
             />
           );
         })}
 
         {/* Per-stop motif ornaments — decorated "stations" pinned on the path at
-            each motif'd node. Skipped for stops with no motif. */}
-        {stops.map((stop, i) =>
-          hasMotif(stop.motif) ? (
+            each motif'd stop node. Skipped for stops with no motif. */}
+        {stops.map((stop, i) => {
+          const anchor = stopAnchors.get(i);
+          return hasMotif(stop.motif) && anchor ? (
             <StopMotifOrnament
               key={`motif-${stop.id}`}
               motif={stop.motif}
-              cx={anchors[i].cx}
-              cy={anchors[i].cy}
+              cx={anchor.cx}
+              cy={anchor.cy}
               accent={accent}
               ground={ground}
             />
-          ) : null,
-        )}
+          ) : null;
+        })}
       </div>
 
       {/* Closing moment — a themed "end of the journey" block after the track,

@@ -8,17 +8,52 @@ import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
-import { MOTIF_IDS } from "@/lib/api-client";
+import { MOTIF_IDS, MAX_FEELING_CHARS } from "@/lib/api-client";
+import type { FeelingPlacement, MediaKind } from "@/lib/api-client";
 
 type StopWithPhotos = Stop & { photos: Photo[] };
 
-function serializePhoto(p: Photo) {
+// Frozen FeelingPlacement enum (spec/api.md + spec/capabilities/feeling-cards.md).
+const FEELING_PLACEMENTS = ["card", "inline", "none"] as const;
+const feelingPlacementEnum = z.enum(FEELING_PLACEMENTS);
+
+/** Unknown/absent placement falls back to "card" (feeling-cards.md). */
+function readPlacement(value: unknown): FeelingPlacement {
+  return (FEELING_PLACEMENTS as readonly string[]).includes(value as string)
+    ? (value as FeelingPlacement)
+    : "card";
+}
+
+/** Blank/whitespace-only feeling is not a feeling — it normalises to null. */
+function normalizeFeeling(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+// Full media shape frozen in spec/api.md: kind + posterUrl + durationSec on
+// EVERY media item. thumbUrl safety rule (data.md): a video with a poster
+// resolves thumbUrl to the poster; a video without one resolves it to webUrl.
+function serializeMedia(p: Photo) {
+  const kind: MediaKind = p.kind === "video" ? "video" : "photo";
+  const webUrl = storage.url(p.webKey);
+  const posterUrl =
+    kind === "video" && p.posterKey ? storage.url(p.posterKey) : null;
+  const durationSec =
+    kind === "video" &&
+    typeof p.durationSec === "number" &&
+    Number.isFinite(p.durationSec)
+      ? p.durationSec
+      : null;
   return {
     id: p.id,
     order: p.order,
     isCover: p.isCover,
-    webUrl: storage.url(p.webKey),
-    thumbUrl: storage.url(p.thumbKey),
+    kind,
+    webUrl,
+    thumbUrl: kind === "video" ? (posterUrl ?? webUrl) : storage.url(p.thumbKey),
+    posterUrl,
+    durationSec,
     width: p.width,
     height: p.height,
     caption: p.caption,
@@ -37,8 +72,10 @@ function serializeStop(s: StopWithPhotos) {
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
     motif: s.motif,
+    feeling: normalizeFeeling(s.feeling),
+    feelingPlacement: readPlacement(s.feelingPlacement),
     tags: [] as never[],
-    photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializePhoto),
+    photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializeMedia),
   };
 }
 
@@ -52,6 +89,10 @@ const patchSchema = z.object({
   body: z.string().nullable().optional(),
   // Unknown motif → zod parse fails → 400. Persisted only when present.
   motif: z.enum(MOTIF_IDS).optional(),
+  // Over MAX_FEELING_CHARS → 400; blank → normalised to null below.
+  feeling: z.string().max(MAX_FEELING_CHARS).nullable().optional(),
+  // Unknown placement → zod parse fails → 400. Persisted only when present.
+  feelingPlacement: feelingPlacementEnum.optional(),
 });
 
 async function handlePatch(
@@ -74,6 +115,9 @@ async function handlePatch(
     return NextResponse.json({ error: "stop not found" }, { status: 404 });
   }
 
+  // Non-destructive: ONLY fields explicitly present in the body are applied, so
+  // the feeling autosave and the drawer's "Save stop" can never clobber each
+  // other (spec/api.md → PATCH /api/stops/:stopId).
   const d = parsed.data;
   const data: Record<string, unknown> = {};
   if (d.title !== undefined) data.title = d.title;
@@ -86,6 +130,8 @@ async function handlePatch(
   }
   if (d.body !== undefined) data.body = d.body;
   if (d.motif !== undefined) data.motif = d.motif;
+  if (d.feeling !== undefined) data.feeling = normalizeFeeling(d.feeling);
+  if (d.feelingPlacement !== undefined) data.feelingPlacement = d.feelingPlacement;
 
   if (Object.keys(data).length > 0) {
     await prisma.stop.update({ where: { id: stopId }, data });
@@ -112,6 +158,8 @@ async function handleDelete(stopId: string): Promise<NextResponse> {
   const keys: string[] = [];
   for (const photo of stop.photos) {
     keys.push(photo.webKey, photo.thumbKey, photo.originalKey);
+    // P2.5: a video's poster object is deleted alongside the other keys.
+    if (photo.posterKey) keys.push(photo.posterKey);
   }
 
   await prisma.stop.delete({ where: { id: stopId } });

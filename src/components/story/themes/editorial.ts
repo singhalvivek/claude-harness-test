@@ -59,6 +59,54 @@ export const editorial: StoryThemeTreatment = {
     moreClassName: "inline-block pt-1 text-sm font-medium",
     moreStyle: { color: "#c96f45" },
   },
+  // Feeling — magazine authority: Bodoni Moda 700 (a high-contrast didone,
+  // deliberately NOT a script) in a terracotta duotone on the theme's warm
+  // paper, with the 4px terracotta left rule. 46% at the shared 2% inset keeps
+  // the >= 4% horizontal centre gap, so opposite-side cards cannot collide.
+  feeling: {
+    segmentHeight: 360,
+    inlineExtraHeight: 56,
+    widthPct: 46,
+    maxWidth: 460,
+    sideInsetPct: 2,
+    cardClassName:
+      "relative overflow-hidden rounded-2xl border border-l-4 px-7 py-7 shadow-xl shadow-[#3b2a1a]/15",
+    cardStyle: {
+      backgroundColor: "#fffaf1",
+      borderColor: "rgba(201,111,69,0.30)",
+      borderLeftColor: "#c96f45",
+    },
+    quoteClassName: "line-clamp-5 whitespace-pre-line",
+    quoteStyle: {
+      fontFamily:
+        'var(--font-feeling-editorial), "Didot", "Bodoni MT", "Times New Roman", serif',
+      fontWeight: 700,
+      fontSize: "clamp(1.5rem, 4.2vw, 2.5rem)",
+      lineHeight: 1.16,
+      color: "#a1522f",
+    },
+    quoteGradient: "linear-gradient(92deg,#c96f45,#8a4b2f 60%,#b1372f)",
+    markClassName: "block select-none",
+    markStyle: {
+      fontFamily:
+        'var(--font-feeling-editorial), "Didot", "Bodoni MT", "Times New Roman", serif',
+      fontSize: "3rem",
+      lineHeight: 0.62,
+      color: "rgba(201,111,69,0.45)",
+    },
+    inlineClassName: "mt-3 border-l-4 pl-3",
+    inlineStyle: { borderColor: "#c96f45" },
+    inlineQuoteClassName: "line-clamp-3 whitespace-pre-line",
+    inlineQuoteStyle: {
+      fontFamily:
+        'var(--font-feeling-editorial), "Didot", "Bodoni MT", "Times New Roman", serif',
+      fontWeight: 700,
+      fontSize: "1.25rem",
+      lineHeight: 1.32,
+      color: "#a1522f",
+    },
+    flourish: "rule",
+  },
   chrome: {
     mainBg: "#f6ecd6",
     headerClassName:

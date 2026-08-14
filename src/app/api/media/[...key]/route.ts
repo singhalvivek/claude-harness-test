@@ -1,7 +1,15 @@
-// Public media route: streams a stored photo derivative by its opaque key from
-// PHOTO_STORAGE_DIR (Phase 1, local disk). No auth — photo bytes are public.
-// In Phase 3 with R2, storage.url() returns the R2 URL directly and this route
+// Public media route: streams a stored media object by its opaque key from
+// PHOTO_STORAGE_DIR (local disk backend). No auth — media bytes are public.
+// With the R2 backend, storage.url() returns the R2 URL directly and this route
 // is bypassed for R2-backed keys.
+//
+// Phase 2.5: serves VIDEO too. Two things are required for that and neither is
+// optional — the correct video `Content-Type`, and real HTTP `Range` support.
+// Without seekable ranges a browser cannot scrub, cannot reliably
+// `preload="metadata"`, and Safari refuses to play the element at all. So the
+// route always advertises `Accept-Ranges: bytes`, answers a satisfiable
+// `Range: bytes=<start>-<end>` with a 206 + `Content-Range`, and an
+// unsatisfiable one with a 416 + `Content-Range: bytes */<size>`.
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -22,14 +30,63 @@ const CONTENT_TYPE_BY_EXT: Record<string, string> = {
   ".avif": "image/avif",
   ".heic": "image/heic",
   ".heif": "image/heif",
+  // Phase 2.5 — video.
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
+  ".m4v": "video/x-m4v",
 };
 
 function contentTypeFor(filePath: string): string {
   return CONTENT_TYPE_BY_EXT[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
 }
 
+type ParsedRange = { start: number; end: number };
+
+/**
+ * Parse a single-range `Range` header against a known object size.
+ * - `null`        → no usable range; serve the whole object with 200.
+ * - `"invalid"`   → syntactically fine but unsatisfiable; serve 416.
+ * - `{start,end}` → inclusive byte range to serve with 206.
+ * Multi-range requests are deliberately answered with the full body (200),
+ * which RFC 9110 permits and every browser handles.
+ */
+function parseRange(header: string, size: number): ParsedRange | "invalid" | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match) return null;
+
+  const [, rawStart, rawEnd] = match;
+  if (rawStart === "" && rawEnd === "") return null;
+
+  let start: number;
+  let end: number;
+
+  if (rawStart === "") {
+    // Suffix form: `bytes=-N` → the last N bytes.
+    const suffix = Number(rawEnd);
+    if (!Number.isFinite(suffix) || suffix <= 0) return "invalid";
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(rawStart);
+    end = rawEnd === "" ? size - 1 : Number(rawEnd);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return "invalid";
+    if (end > size - 1) end = size - 1;
+  }
+
+  if (size === 0 || start >= size || start > end || start < 0) return "invalid";
+  return { start, end };
+}
+
+function streamOf(filePath: string, range?: ParsedRange): ReadableStream<Uint8Array> {
+  const nodeStream = range
+    ? createReadStream(filePath, { start: range.start, end: range.end })
+    : createReadStream(filePath);
+  return Readable.toWeb(nodeStream) as unknown as ReadableStream<Uint8Array>;
+}
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ key: string[] }> },
 ) {
   const start = Date.now();
@@ -68,16 +125,48 @@ export async function GET(
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  const nodeStream = createReadStream(filePath);
-  const body = Readable.toWeb(nodeStream) as unknown as ReadableStream<Uint8Array>;
+  const contentType = contentTypeFor(filePath);
+  const cacheControl = "public, max-age=31536000, immutable";
+
+  const rangeHeader = req.headers.get("range");
+  if (rangeHeader) {
+    const range = parseRange(rangeHeader, size);
+
+    if (range === "invalid") {
+      finish(416, "unsatisfiable range");
+      return new NextResponse(null, {
+        status: 416,
+        headers: {
+          "Content-Range": `bytes */${size}`,
+          "Accept-Ranges": "bytes",
+          "Content-Type": contentType,
+        },
+      });
+    }
+
+    if (range) {
+      finish(206);
+      return new NextResponse(streamOf(filePath, range), {
+        status: 206,
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": String(range.end - range.start + 1),
+          "Content-Range": `bytes ${range.start}-${range.end}/${size}`,
+          "Accept-Ranges": "bytes",
+          "Cache-Control": cacheControl,
+        },
+      });
+    }
+  }
 
   finish(200);
-  return new NextResponse(body, {
+  return new NextResponse(streamOf(filePath), {
     status: 200,
     headers: {
-      "Content-Type": contentTypeFor(filePath),
+      "Content-Type": contentType,
       "Content-Length": String(size),
-      "Cache-Control": "public, max-age=31536000, immutable",
+      "Accept-Ranges": "bytes",
+      "Cache-Control": cacheControl,
     },
   });
 }

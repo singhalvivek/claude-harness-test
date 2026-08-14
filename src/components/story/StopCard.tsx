@@ -4,17 +4,22 @@ import { useRef, useState, type CSSProperties } from "react";
 import { motion, useScroll, useTransform, AnimatePresence, type Variants } from "framer-motion";
 import type { Stop } from "@/lib/api-client";
 import { MotifGlyph, hasMotif } from "@/components/motifs/catalog";
+import { CoverMedia } from "./CoverMedia";
 import { PhotoGallery } from "./PhotoGallery";
+import { feelingTextOf, rendersFeelingInline } from "./serpentine";
 import { withAlpha } from "./color";
-import type { CardTreatment } from "./themes";
+import type { CardTreatment, FeelingTreatment } from "./themes";
 
 // One stop anchored along the serpentine path. It:
 //  - is absolutely positioned at its node's vertical center, alternating
 //    left/right (order-ascending is handled by the parent),
 //  - reveals with a staggered entrance (photo first, then the text + a themed
 //    accent) via Framer Motion variants + `whileInView`,
-//  - gives its cover photo parallax depth (translateY tied to scroll) COMPOSED
-//    with a slow ken-burns drift (scale),
+//  - delegates its cover to `CoverMedia`, which renders a photo OR a video
+//    behind the SAME frozen [data-cover-photo] hook (parallax translateY is
+//    supplied from here, so the shipped parallax assertion is unchanged),
+//  - renders the stop's [data-feeling-inline] pull-quote when the stop's
+//    placement is "inline" and its feeling is non-blank,
 //  - expands into the full photo gallery/carousel when clicked.
 // The card's framing, sizing and typography come from the active theme's
 // `CardTreatment` (cinematic overlays a glass caption over a hero photo;
@@ -30,6 +35,8 @@ interface StopCardProps {
   top: number;
   reduce: boolean;
   card: CardTreatment;
+  /** Theme feeling treatment — styles the inline pull-quote. */
+  feeling: FeelingTreatment;
   /** Theme accent color — tints the small reveal accent (rule + motif). */
   accent: string;
 }
@@ -58,12 +65,13 @@ const fade: Variants = {
   show: { opacity: 1, transition: { duration: 0.6, ease: EASE } },
 };
 
-export function StopCard({ stop, side, top, reduce, card, accent }: StopCardProps) {
+export function StopCard({ stop, side, top, reduce, card, feeling, accent }: StopCardProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [coverBroken, setCoverBroken] = useState(false);
 
   const cover = stop.photos.find((p) => p.isCover) ?? stop.photos[0] ?? null;
+  // Non-blank feeling with placement "inline" → the pull-quote inside this card.
+  const inlineFeeling = rendersFeelingInline(stop) ? feelingTextOf(stop) : null;
 
   // Parallax: as the card travels through the viewport, drift the cover image
   // vertically inside its (overflow-hidden, oversized) frame for depth.
@@ -99,41 +107,47 @@ export function StopCard({ stop, side, top, reduce, card, accent }: StopCardProp
 
   const label = stop.placeName ?? stop.title ?? "Untitled stop";
 
+  // Shown when there is no media at all, or when the object fails to load
+  // (CoverMedia owns the failure branch and renders this as its `fallback`).
+  const coverFallback$ = (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+      style={{
+        background: `linear-gradient(135deg, ${withAlpha(accent, 0.1)}, ${withAlpha(accent, 0.05)})`,
+        color: withAlpha(accent, 0.6),
+      }}
+    >
+      {hasMotif(stop.motif) ? (
+        <MotifGlyph motif={stop.motif} size={40} />
+      ) : (
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+          <path d="M21 15l-5-5L5 21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+      <span className="text-xs">No photo yet</span>
+    </div>
+  );
+
   const cover$ = (
     <div
       className={card.coverFrameClassName}
       style={{ aspectRatio: card.coverAspect, ...card.coverFrameStyle }}
     >
-      {cover && !coverBroken ? (
-        <motion.img
-          data-cover-photo
-          src={cover.webUrl}
+      {cover ? (
+        // Photo OR video — CoverMedia renders [data-cover-photo] for both kinds,
+        // keeping the frozen parallax/cover assertions working unchanged.
+        <CoverMedia
+          media={cover}
           alt={label}
-          onError={() => setCoverBroken(true)}
-          style={{ y: coverY }}
-          animate={reduce ? undefined : { scale: [1.06, 1.12, 1.06] }}
-          transition={reduce ? undefined : { duration: 22, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-[8%] left-0 h-[116%] w-full object-cover"
+          reduce={reduce}
+          y={coverY}
+          accent={accent}
+          fallback={coverFallback$}
         />
       ) : (
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center gap-2"
-          style={{
-            background: `linear-gradient(135deg, ${withAlpha(accent, 0.1)}, ${withAlpha(accent, 0.05)})`,
-            color: withAlpha(accent, 0.6),
-          }}
-        >
-          {hasMotif(stop.motif) ? (
-            <MotifGlyph motif={stop.motif} size={40} />
-          ) : (
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
-              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-              <path d="M21 15l-5-5L5 21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-          <span className="text-xs">No photo yet</span>
-        </div>
+        coverFallback$
       )}
       <span className={card.badgeClassName} style={card.badgeStyle}>
         Stop {stop.order + 1}
@@ -172,6 +186,24 @@ export function StopCard({ stop, side, top, reduce, card, accent }: StopCardProp
         <p className={card.bodyClassName} style={card.bodyStyle}>
           {stop.body}
         </p>
+      )}
+      {/* The "inside the stop card" placement: a smaller pull-quote in the very
+          same theme face as the standalone feeling card, sitting below the
+          caption body and above the "View N photos" link. */}
+      {inlineFeeling && (
+        <blockquote
+          data-feeling-inline
+          className={feeling.inlineClassName}
+          style={feeling.inlineStyle}
+        >
+          <p
+            data-feeling-quote
+            className={feeling.inlineQuoteClassName}
+            style={feeling.inlineQuoteStyle}
+          >
+            {inlineFeeling}
+          </p>
+        </blockquote>
       )}
       <span className={card.moreClassName} style={card.moreStyle}>
         {open ? "Hide photos ▲" : `View ${stop.photos.length} photo${stop.photos.length === 1 ? "" : "s"} ▼`}

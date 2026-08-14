@@ -57,6 +57,61 @@ export interface CardTreatment {
   tapeStyle?: CSSProperties;
 }
 
+/**
+ * Per-theme treatment for the Phase-2.5 feeling surfaces (consumed by
+ * `FeelingCard` for the standalone `[data-feeling-card]` beat and by `StopCard`
+ * for the `[data-feeling-inline]` pull-quote). Pure data, same house style as
+ * `CardTreatment`: structural utilities as Tailwind classNames, dynamic colour
+ * inline. Each theme supplies exactly ONE display face, used at 40px on the
+ * standalone card and ~20px inline.
+ */
+export interface FeelingTreatment {
+  /** Height (px) a standalone feeling beat occupies on the path. */
+  segmentHeight: number;
+  /** Extra height (px) added to a STOP beat that renders an inline pull-quote. */
+  inlineExtraHeight: number;
+  /** Card footprint. Must satisfy widthPct <= card.widthPct and reuse
+   *  card.sideInsetPct, so no new horizontal collision risk is introduced. */
+  widthPct: number;
+  maxWidth: number;
+  sideInsetPct: number;
+  /** Optional slight rotation (deg) for the scrapbook themes, applied on the
+   *  NON-animated wrapper (exactly like `CardTreatment.rotateDeg`) so it never
+   *  fights Framer's transform on the animated article. */
+  rotateDeg?: number;
+  /** The standalone [data-feeling-card] surface. */
+  cardClassName: string;
+  cardStyle?: CSSProperties;
+  /** The [data-feeling-quote] display text. `quoteStyle.color` is ALWAYS the
+   *  solid fallback ink and must be set. */
+  quoteClassName: string;
+  /** MUST include fontFamily: "var(--font-feeling-<theme>), <that theme's
+   *  fallback stack>" — cinematic: Playfair Display / Georgia, "Times New
+   *  Roman", serif · editorial: Bodoni Moda / "Didot", "Bodoni MT", "Times New
+   *  Roman", serif · minimal: Space Grotesk / "Segoe UI", Roboto, system-ui,
+   *  sans-serif · vintage: Caveat / "Segoe Script", "Bradley Hand", cursive.
+   *  The fallback must stay in the SAME type class as the webfont, so a failed
+   *  load never degrades into Fraunces. See ui.md. */
+  quoteStyle: CSSProperties;
+  /** Optional multi-colour ink. Applied as `backgroundImage` +
+   *  background-clip:text + color:transparent ONLY when the browser reports
+   *  support; otherwise quoteStyle.color shows. */
+  quoteGradient?: string;
+  /** Decorative opening quote mark. */
+  markClassName: string;
+  markStyle?: CSSProperties;
+  /** The [data-feeling-inline] pull-quote inside a stop card. */
+  inlineClassName: string;
+  inlineStyle?: CSSProperties;
+  inlineQuoteClassName: string;
+  /** Same `fontFamily` as quoteStyle (one face per theme), at the smaller
+   *  ~20px inline size — that size is a legibility constraint on the face
+   *  choice, not an afterthought. */
+  inlineQuoteStyle: CSSProperties;
+  /** Theme flourish on the standalone card. */
+  flourish: "rule" | "tape" | "none";
+}
+
 /** Styling for the traveling `[data-story-marker]` inner dot (kept solid in
  *  every theme so the frozen "marker has a non-transparent bg" check holds). */
 export interface MarkerTreatment {
@@ -119,5 +174,7 @@ export interface StoryThemeTreatment {
 
   marker: MarkerTreatment;
   card: CardTreatment;
+  /** Phase 2.5 — the theme's feeling face, colour treatment and beat budget. */
+  feeling: FeelingTreatment;
   chrome: StoryChrome;
 }

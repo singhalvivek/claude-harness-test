@@ -40,16 +40,69 @@ export interface Tag {
   kind: "mood" | "activity";
 }
 
+// ─── Media (Phase 2.5) ───────────────────────────────────────────────────────
+// The DOMAIN concept is "media" — a photo OR a video. The DB table and the API
+// response type both keep the name `Photo` (no rename, no parallel Video model);
+// a single discriminator `kind` splits them. See spec/capabilities/video-media.md.
+
+/** Media discriminator. Every pre-2.5 row backfills to "photo". */
+export type MediaKind = "photo" | "video";
+
+/**
+ * Accepted video content types (MIME parameters stripped before matching, so
+ * `video/mp4;codecs=avc1.42E01E` matches `video/mp4`). `video/quicktime` is the
+ * common iPhone `.mov` case. Typed `readonly string[]` on purpose: server routes
+ * test arbitrary request strings against it with `.includes(mime)`.
+ */
+export const VIDEO_MIME_TYPES: readonly string[] = [
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+];
+
+/** Filename extensions used when `File.type` is empty (some OS/browser combos
+ *  report no MIME for `.mov`). Kept in lockstep with VIDEO_MIME_TYPES. */
+const VIDEO_EXTENSIONS: readonly string[] = ["mp4", "mov", "webm", "m4v"];
+
+/** Fallback MIME for an extension, used only when `File.type` is empty. */
+const VIDEO_MIME_BY_EXTENSION: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+};
+
 export interface Photo {
   id: string;
   order: number;
   isCover: boolean;
+  /** "photo" for every pre-existing row; "video" for a video (Phase 2.5). */
+  kind: MediaKind;
+  /** Always the playable/displayable object (the video itself for kind:"video"). */
   webUrl: string;
+  /** The POSTER for a video that has one, else the object itself. Consumers must
+   *  branch on `kind` before putting this in an <img> (thumbUrl safety rule). */
   thumbUrl: string;
+  /** Video only: the client-captured poster frame. Null for photos. */
+  posterUrl: string | null;
+  /** Video only: duration in seconds, read in the browser. Null for photos. */
+  durationSec: number | null;
   width: number;
   height: number;
   caption: string | null;
 }
+
+/** Domain alias — the DB table and response type stay named `Photo`. */
+export type Media = Photo;
+
+// ─── Feeling (Phase 2.5) ─────────────────────────────────────────────────────
+
+/** How a stop's feeling renders: its own beat on the serpentine (`card`), a
+ *  pull-quote inside the stop card (`inline`), or kept but hidden (`none`). */
+export type FeelingPlacement = "card" | "inline" | "none";
+
+/** Maximum length of a stop's feeling line (zod-validated server-side; longer → 400). */
+export const MAX_FEELING_CHARS = 200;
 
 export interface Stop {
   id: string;
@@ -62,6 +115,9 @@ export interface Stop {
   occurredAt: string | null; // ISO 8601
   body: string | null;
   motif: StopMotif; // decorative motif; "none" by default
+  /** One short line of how this stop felt (≤ MAX_FEELING_CHARS). Blank → null. */
+  feeling: string | null;
+  feelingPlacement: FeelingPlacement; // "card" by default
   tags: Tag[]; // always [] in Phase 1
   photos: Photo[];
 }
@@ -124,6 +180,10 @@ export interface StopInput {
   occurredAt?: string | null; // ISO 8601
   body?: string;
   motif?: StopMotif; // omitted → DB default "none"
+  /** Phase 2.5 — omitted means "leave untouched" (non-destructive PATCH).
+   *  Blank/whitespace normalises to null server-side. */
+  feeling?: string | null;
+  feelingPlacement?: FeelingPlacement;
 }
 
 export type StopPatch = StopInput;
@@ -254,10 +314,154 @@ export async function uploadPhotos(stopId: string, files: File[]): Promise<Photo
   return data.photos;
 }
 
-interface PresignResponse {
+interface PresignTarget {
   key: string;
   uploadUrl: string;
   method: "PUT";
+}
+
+interface PresignResponse extends PresignTarget {
+  /** Phase 2.5 — the second target for a video's poster JPEG, under the SAME
+   *  `<uuid>` prefix. Null for photos and for a video request that asked for no
+   *  poster (capture failed). */
+  poster?: PresignTarget | null;
+}
+
+/** `video/mp4;codecs=avc1.42E01E` → `video/mp4`. */
+function baseMime(contentType: string): string {
+  return (contentType || "").split(";")[0]!.trim().toLowerCase();
+}
+
+function extensionOf(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  return dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
+}
+
+/**
+ * True when `file` is one of the accepted video types. The MIME decides (with
+ * parameters stripped); when `File.type` is empty or the generic
+ * `application/octet-stream`, the `.mp4`/`.m4v`/`.mov`/`.webm` extension decides.
+ */
+export function isVideoFile(file: File): boolean {
+  const mime = baseMime(file.type);
+  if (VIDEO_MIME_TYPES.includes(mime)) return true;
+  if (mime && mime !== "application/octet-stream") return false;
+  return VIDEO_EXTENSIONS.includes(extensionOf(file.name));
+}
+
+/** The content type to declare for `file` — its own MIME, or one derived from a
+ *  video extension when the browser reported none. */
+function contentTypeFor(file: File): string {
+  const mime = baseMime(file.type);
+  if (mime && mime !== "application/octet-stream") return mime;
+  const byExt = VIDEO_MIME_BY_EXTENSION[extensionOf(file.name)];
+  return byExt ?? file.type ?? "application/octet-stream";
+}
+
+export interface VideoMetadata {
+  width: number;
+  height: number;
+  durationSec: number | null;
+  poster: Blob | null;
+}
+
+const VIDEO_METADATA_TIMEOUT_MS = 8_000;
+
+/**
+ * Browser-only. Reads intrinsic size + duration from an off-DOM `<video>` and
+ * captures a poster JPEG via `canvas.toBlob()`. NEVER server-side — no ffmpeg
+ * exists (and never will); this is the ONLY source of a video's width/height/
+ * duration/poster.
+ *
+ * Resolves `{ width: 0, height: 0, durationSec: null, poster: null }` on decode
+ * failure or after an 8 s timeout, and always revokes its object URL. If the
+ * metadata was read but only the POSTER capture failed (seek error, tainted
+ * canvas, `toBlob` → null), the real width/height/duration are returned with
+ * `poster: null` — the video still uploads and the UI shows its labelled
+ * no-poster placeholder. Never rejects.
+ */
+export function readVideoMetadata(file: File): Promise<VideoMetadata> {
+  const empty: VideoMetadata = { width: 0, height: 0, durationSec: null, poster: null };
+
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return Promise.resolve(empty);
+  }
+
+  return new Promise<VideoMetadata>((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Updated as soon as loadedmetadata fires, so a later failure still returns
+    // what we legitimately know.
+    let known: VideoMetadata = { ...empty };
+
+    const settle = (result: VideoMetadata) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      video.removeAttribute("src");
+      try {
+        video.load();
+      } catch {
+        // Best-effort teardown only.
+      }
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+
+    timer = setTimeout(() => settle(known), VIDEO_METADATA_TIMEOUT_MS);
+
+    video.onerror = () => settle(known);
+
+    video.onloadedmetadata = () => {
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+      known = {
+        width: video.videoWidth || 0,
+        height: video.videoHeight || 0,
+        durationSec: duration,
+        poster: null,
+      };
+
+      if (known.width === 0 || known.height === 0) {
+        settle(known);
+        return;
+      }
+
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = known.width;
+          canvas.height = known.height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            settle(known);
+            return;
+          }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(
+            (blob) => settle({ ...known, poster: blob ?? null }),
+            "image/jpeg",
+            0.82,
+          );
+        } catch {
+          settle(known); // e.g. a tainted canvas — keep the metadata, drop the poster.
+        }
+      };
+
+      try {
+        video.currentTime = duration ? Math.min(0.1, duration / 2) : 0.1;
+      } catch {
+        settle(known);
+      }
+    };
+
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+    video.src = url;
+  });
 }
 
 /** Read an image's pixel dimensions in the browser (0×0 if it can't decode,
@@ -282,23 +486,63 @@ function readImageSize(file: File): Promise<{ width: number; height: number }> {
   });
 }
 
+/** Progress stages reported by `uploadMediaDirect`, in order. "poster" only
+ *  happens for a video whose poster frame was captured. */
+export type UploadStage = "reading" | "uploading" | "poster" | "finishing";
+
 /**
- * Upload ONE photo DIRECTLY to storage (R2, or the local receiver in dev),
- * bypassing the serverless request-body size limit so full-resolution originals
- * of any size work: presign → PUT the bytes straight to storage → complete
- * (create the Photo row). Returns the created Photo.
+ * Upload ONE media item (photo OR video) DIRECTLY to storage (R2, or the local
+ * receiver in dev), bypassing the serverless request-body size limit so
+ * full-resolution originals of any size work:
+ *
+ *   presign (video → also a poster target) → PUT bytes → PUT poster → complete.
+ *
+ * The poster is uploaded BEFORE `complete`, so a registered `posterKey` always
+ * points at bytes that exist. A failed poster PUT still completes the video,
+ * without a `posterKey` (the UI degrades to its labelled placeholder). A failed
+ * media PUT throws and creates no row.
  */
-export async function uploadPhotoDirect(stopId: string, file: File): Promise<Photo> {
-  const contentType = file.type || "application/octet-stream";
-  const { width, height } = await readImageSize(file);
+export async function uploadMediaDirect(
+  stopId: string,
+  file: File,
+  onStage?: (stage: UploadStage) => void,
+): Promise<Media> {
+  const contentType = contentTypeFor(file);
+  const isVideo = isVideoFile(file);
+
+  // ── reading: intrinsic size (+ duration and poster frame for a video) ──
+  onStage?.("reading");
+  let width = 0;
+  let height = 0;
+  let durationSec: number | null = null;
+  let poster: Blob | null = null;
+
+  if (isVideo) {
+    const meta = await readVideoMetadata(file);
+    width = meta.width;
+    height = meta.height;
+    durationSec = meta.durationSec;
+    poster = meta.poster;
+  } else {
+    const size = await readImageSize(file);
+    width = size.width;
+    height = size.height;
+  }
 
   const presign = await request<PresignResponse>(
     `/api/stops/${encodeURIComponent(stopId)}/photos/presign`,
-    jsonInit("POST", { filename: file.name, contentType }),
+    jsonInit("POST", {
+      filename: file.name,
+      contentType,
+      ...(isVideo ? { kind: "video" as MediaKind } : {}),
+      // Only ask for a poster target when we actually captured one.
+      ...(isVideo && poster ? { posterContentType: "image/jpeg" } : {}),
+    }),
   );
 
-  // PUT the bytes directly to storage. Same-origin (local) sends the session
-  // cookie by default; the cross-origin R2 presigned URL needs no cookies.
+  // ── uploading: PUT the bytes directly to storage. Same-origin (local) sends
+  // the session cookie by default; the cross-origin R2 presigned URL needs none.
+  onStage?.("uploading");
   const put = await fetch(presign.uploadUrl, {
     method: presign.method,
     body: file,
@@ -308,10 +552,41 @@ export async function uploadPhotoDirect(stopId: string, file: File): Promise<Pho
     throw new ApiError(put.status, `Upload failed with status ${put.status}`);
   }
 
-  return request<Photo>(
+  // ── poster: best-effort. A failure here must never lose the video. ──
+  let posterKey: string | null = null;
+  const posterTarget = presign.poster ?? null;
+  if (isVideo && poster && posterTarget) {
+    onStage?.("poster");
+    try {
+      const posterPut = await fetch(posterTarget.uploadUrl, {
+        method: posterTarget.method,
+        body: poster,
+        headers: { "Content-Type": "image/jpeg" },
+      });
+      if (posterPut.ok) posterKey = posterTarget.key;
+    } catch {
+      posterKey = null; // continue without a poster
+    }
+  }
+
+  // ── finishing: create the media row ──
+  onStage?.("finishing");
+  return request<Media>(
     `/api/stops/${encodeURIComponent(stopId)}/photos/complete`,
-    jsonInit("POST", { key: presign.key, width, height }),
+    jsonInit("POST", {
+      key: presign.key,
+      width,
+      height,
+      ...(isVideo
+        ? { kind: "video" as MediaKind, posterKey, durationSec }
+        : {}),
+    }),
   );
+}
+
+/** Kept as a thin alias of `uploadMediaDirect` so no existing call site breaks. */
+export function uploadPhotoDirect(stopId: string, file: File): Promise<Photo> {
+  return uploadMediaDirect(stopId, file);
 }
 
 export function updatePhoto(photoId: string, patch: PhotoPatch): Promise<Photo> {

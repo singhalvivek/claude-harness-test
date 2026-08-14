@@ -12,7 +12,9 @@ type PhotoRow = {
   id: string;
   order: number;
   isCover: boolean;
+  kind: string;
   thumbKey: string;
+  posterKey: string | null;
 };
 
 type TripWithStops = {
@@ -26,18 +28,36 @@ type TripWithStops = {
   stops: { order: number; photos: PhotoRow[] }[];
 };
 
+// `coverThumbUrl` is consumed by an <img> on the trip card, so it must always
+// resolve to a STILL. For a video (P2.5) that still is the client-captured
+// poster; a video with no poster has no usable thumbnail at all, so it yields
+// null and the scan falls through to the next candidate rather than handing an
+// .mp4 to an <img>. See the thumbUrl safety rule in spec/data.md.
+function stillUrlFor(p: PhotoRow): string | null {
+  if (p.kind === "video") {
+    return p.posterKey ? storage.url(p.posterKey) : null;
+  }
+  return storage.url(p.thumbKey);
+}
+
 function deriveCoverThumbUrl(trip: TripWithStops): string | null {
   const stopsByOrder = [...trip.stops].sort((a, b) => a.order - b.order);
   if (trip.coverPhotoId) {
     for (const stop of stopsByOrder) {
       const explicit = stop.photos.find((p) => p.id === trip.coverPhotoId);
-      if (explicit) return storage.url(explicit.thumbKey);
+      if (explicit) {
+        const url = stillUrlFor(explicit);
+        if (url) return url;
+        break; // explicit cover exists but has no still — fall back to the scan
+      }
     }
   }
   for (const stop of stopsByOrder) {
     const photos = [...stop.photos].sort((a, b) => a.order - b.order);
     const cover = photos.find((p) => p.isCover) ?? photos[0];
-    if (cover) return storage.url(cover.thumbKey);
+    if (!cover) continue;
+    const url = stillUrlFor(cover);
+    if (url) return url;
   }
   return null;
 }
@@ -60,7 +80,14 @@ async function handleGet(): Promise<NextResponse> {
         include: {
           photos: {
             orderBy: { order: "asc" },
-            select: { id: true, order: true, isCover: true, thumbKey: true },
+            select: {
+              id: true,
+              order: true,
+              isCover: true,
+              kind: true,
+              thumbKey: true,
+              posterKey: true,
+            },
           },
         },
       },

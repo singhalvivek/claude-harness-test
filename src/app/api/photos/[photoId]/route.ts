@@ -1,4 +1,6 @@
-// PATCH · DELETE /api/photos/:photoId — owner only.
+// PATCH · DELETE /api/photos/:photoId — owner only. `kind`-agnostic: the row may
+// be a photo or (Phase 2.5) a video, and DELETE removes the video's poster object
+// alongside its three key columns.
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -8,14 +10,18 @@ import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
+import type { MediaKind } from "@/lib/api-client";
 
 function serializePhoto(p: Photo) {
   return {
     id: p.id,
     order: p.order,
     isCover: p.isCover,
+    kind: p.kind as MediaKind,
     webUrl: storage.url(p.webKey),
     thumbUrl: storage.url(p.thumbKey),
+    posterUrl: p.posterKey ? storage.url(p.posterKey) : null,
+    durationSec: p.durationSec,
     width: p.width,
     height: p.height,
     caption: p.caption,
@@ -79,7 +85,14 @@ async function handleDelete(photoId: string): Promise<NextResponse> {
     }
   });
 
-  for (const key of [photo.webKey, photo.thumbKey, photo.originalKey]) {
+  // Delete every distinct object this row owns — including the video poster
+  // (P2.5). `storage.delete` is idempotent, so a missing object is not an error.
+  const keys = new Set(
+    [photo.webKey, photo.thumbKey, photo.originalKey, photo.posterKey].filter(
+      (k): k is string => typeof k === "string" && k.length > 0,
+    ),
+  );
+  for (const key of keys) {
     try {
       await storage.delete(key);
     } catch (err) {

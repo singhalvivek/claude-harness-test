@@ -8,18 +8,52 @@ import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
+import type { FeelingPlacement, MediaKind } from "@/lib/api-client";
 
 type StopTagWithTag = StopTag & { tag: Tag };
 type StopWithRelations = Stop & { photos: Photo[]; tags: StopTagWithTag[] };
 type TripFull = Trip & { stops: StopWithRelations[] };
 
-function serializePhoto(p: Photo) {
+// Frozen FeelingPlacement enum (spec/api.md + spec/capabilities/feeling-cards.md).
+const FEELING_PLACEMENTS = ["card", "inline", "none"] as const;
+
+/** Unknown/absent placement falls back to "card" (feeling-cards.md). */
+function readPlacement(value: unknown): FeelingPlacement {
+  return (FEELING_PLACEMENTS as readonly string[]).includes(value as string)
+    ? (value as FeelingPlacement)
+    : "card";
+}
+
+/** Blank/whitespace-only feeling is not a feeling — it reads back as null. */
+function normalizeFeeling(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+// Full media shape frozen in spec/api.md: kind + posterUrl + durationSec on
+// EVERY media item. thumbUrl safety rule (data.md): a video with a poster
+// resolves thumbUrl to the poster; a video without one resolves it to webUrl.
+function serializeMedia(p: Photo) {
+  const kind: MediaKind = p.kind === "video" ? "video" : "photo";
+  const webUrl = storage.url(p.webKey);
+  const posterUrl =
+    kind === "video" && p.posterKey ? storage.url(p.posterKey) : null;
+  const durationSec =
+    kind === "video" &&
+    typeof p.durationSec === "number" &&
+    Number.isFinite(p.durationSec)
+      ? p.durationSec
+      : null;
   return {
     id: p.id,
     order: p.order,
     isCover: p.isCover,
-    webUrl: storage.url(p.webKey),
-    thumbUrl: storage.url(p.thumbKey),
+    kind,
+    webUrl,
+    thumbUrl: kind === "video" ? (posterUrl ?? webUrl) : storage.url(p.thumbKey),
+    posterUrl,
+    durationSec,
     width: p.width,
     height: p.height,
     caption: p.caption,
@@ -46,8 +80,10 @@ function serializeStop(s: StopWithRelations) {
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
     motif: s.motif,
+    feeling: normalizeFeeling(s.feeling),
+    feelingPlacement: readPlacement(s.feelingPlacement),
     tags: s.tags.map(serializeTag),
-    photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializePhoto),
+    photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializeMedia),
   };
 }
 
@@ -144,6 +180,8 @@ async function handleDelete(tripId: string): Promise<NextResponse> {
   for (const stop of trip.stops) {
     for (const photo of stop.photos) {
       keys.push(photo.webKey, photo.thumbKey, photo.originalKey);
+      // P2.5: a video's poster object is deleted alongside the other keys.
+      if (photo.posterKey) keys.push(photo.posterKey);
     }
   }
 

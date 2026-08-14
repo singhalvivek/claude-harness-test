@@ -19,6 +19,7 @@ export type {
   StoryThemeTreatment,
   CardTreatment,
   MarkerTreatment,
+  FeelingTreatment,
   StoryChrome,
 } from "./types";
 

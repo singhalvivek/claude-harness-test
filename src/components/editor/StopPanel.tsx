@@ -8,6 +8,7 @@ import { ComingSoonPill } from "@/components/ui/Pill";
 import { getErrorMessage } from "@/components/ui/errors";
 import { LocationPicker, type LocationValue } from "@/components/map/LocationPicker";
 import { PhotoUploader } from "@/components/photos/PhotoUploader";
+import { FeelingEditor } from "@/components/editor/FeelingEditor";
 import { MotifPicker } from "@/components/editor/MotifPicker";
 import { type SaveStatus } from "@/components/editor/TripHeader";
 import { fromDateTimeLocal, toDateTimeLocal } from "./format";
@@ -15,9 +16,13 @@ import { fromDateTimeLocal, toDateTimeLocal } from "./format";
 /**
  * Add/Edit Stop drawer. The parent creates the Stop row before opening (so the
  * uploader always has a real `stopId`) and passes it in as `stop`. Location,
- * date/time and entry are buffered locally and persisted on Save; photos persist
- * immediately (the live `stop.photos` come from the parent's refresh). Cancelling
- * a brand-new draft deletes the empty stop so nothing is left behind.
+ * date/time and entry are buffered locally and persisted on Save; photos, the
+ * motif and the feeling persist immediately (the live `stop.photos` come from
+ * the parent's refresh). Cancelling a brand-new draft deletes the empty stop so
+ * nothing is left behind.
+ *
+ * `Save stop` sends ONLY the buffered fields it owns — it never sends `feeling`
+ * or `feelingPlacement`, so it can never clobber an autosaved feeling.
  *
  * Mount this with `key={stop.id}` so the local form state initialises per stop.
  */
@@ -51,6 +56,9 @@ export function StopPanel({
     setSaving(true);
     setError(null);
     try {
+      // Deliberately omits `feeling`/`feelingPlacement`: those are owned by the
+      // FeelingEditor's autosave path (PATCH is non-destructive, so omitted
+      // fields are left untouched).
       await updateStop(stop.id, {
         title: title.trim() === "" ? null : title.trim(),
         placeName: location.placeName.trim() === "" ? null : location.placeName.trim(),
@@ -73,6 +81,14 @@ export function StopPanel({
   function handleMotifSaveStatus(status: SaveStatus) {
     if (status === "saving") setError(null);
     else if (status === "error") setError("Could not update the motif for this stop.");
+  }
+
+  // The feeling autosaves on blur and its placement live-saves on click. The
+  // editor shows its own quiet "Saving… / Saved ✓"; only failures need the
+  // drawer's shared error slot (the previous value is kept — non-destructive).
+  function handleFeelingSaveStatus(status: SaveStatus) {
+    if (status === "saving") setError(null);
+    else if (status === "error") setError("Could not save the feeling for this stop.");
   }
 
   async function handleCancel() {
@@ -168,6 +184,10 @@ export function StopPanel({
             A little symbol for this stop&rsquo;s story ornament.
           </p>
           <MotifPicker stop={stop} refresh={refresh} onSaveStatus={handleMotifSaveStatus} />
+        </section>
+
+        <section>
+          <FeelingEditor stop={stop} refresh={refresh} onSaveStatus={handleFeelingSaveStatus} />
         </section>
 
         <section>

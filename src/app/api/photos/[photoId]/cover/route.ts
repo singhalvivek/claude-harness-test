@@ -1,4 +1,11 @@
-// POST /api/photos/:photoId/cover — make this photo its stop's cover. Owner only.
+// POST /api/photos/:photoId/cover — make this media item its stop's cover.
+// Owner only.
+//
+// Deliberately `kind`-AGNOSTIC (Phase 2.5): a video can be a stop's cover exactly
+// like a photo. Cover selection is a pure row flag — one cover per stop, swapped
+// transactionally — so nothing here inspects bytes, MIME or `kind`. Downstream,
+// a video cover resolves its still through `posterKey` (see the trip serializers
+// and the thumbUrl safety rule in spec/data.md).
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -9,6 +16,7 @@ import { log } from "@/lib/logger";
 async function handlePost(photoId: string): Promise<NextResponse> {
   const photo = await prisma.photo.findUnique({
     where: { id: photoId },
+    // `kind` is intentionally not read: photos and videos are equally coverable.
     select: { id: true, stopId: true },
   });
   if (!photo) {

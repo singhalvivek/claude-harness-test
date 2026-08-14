@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start -p 8001",
     "gate": "prisma migrate deploy && next build && playwright test",
+    "gate:phase": "node scripts/gate-phase.mjs",
     "postinstall": "node -e \"const fs=require('fs');if(!fs.existsSync('.env')){if(fs.existsSync('.env.example'))fs.copyFileSync('.env.example','.env')}\" && prisma generate"
   },
   "dependencies": {
