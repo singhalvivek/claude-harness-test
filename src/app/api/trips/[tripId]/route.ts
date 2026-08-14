@@ -8,18 +8,51 @@ import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
+import { MAX_FEELING_CHARS, FEELING_PLACEMENTS } from "@/lib/api-client";
+import type { FeelingPlacement, MediaKind } from "@/lib/api-client";
 
 type StopTagWithTag = StopTag & { tag: Tag };
 type StopWithRelations = Stop & { photos: Photo[]; tags: StopTagWithTag[] };
 type TripFull = Trip & { stops: StopWithRelations[] };
 
-function serializePhoto(p: Photo) {
+/** Unknown/absent placement falls back to "card" (feeling-cards.md).
+ *  FEELING_PLACEMENTS is imported, not re-declared. */
+function readPlacement(value: unknown): FeelingPlacement {
+  return (FEELING_PLACEMENTS as readonly string[]).includes(value as string)
+    ? (value as FeelingPlacement)
+    : "card";
+}
+
+/** Blank/whitespace-only feeling is not a feeling — it reads back as null. */
+function normalizeFeeling(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+// Full media shape frozen in spec/api.md: kind + posterUrl + durationSec on
+// EVERY media item. thumbUrl safety rule (data.md): a video with a poster
+// resolves thumbUrl to the poster; a video without one resolves it to webUrl.
+function serializeMedia(p: Photo) {
+  const kind: MediaKind = p.kind === "video" ? "video" : "photo";
+  const webUrl = storage.url(p.webKey);
+  const posterUrl =
+    kind === "video" && p.posterKey ? storage.url(p.posterKey) : null;
+  const durationSec =
+    kind === "video" &&
+    typeof p.durationSec === "number" &&
+    Number.isFinite(p.durationSec)
+      ? p.durationSec
+      : null;
   return {
     id: p.id,
     order: p.order,
     isCover: p.isCover,
-    webUrl: storage.url(p.webKey),
-    thumbUrl: storage.url(p.thumbKey),
+    kind,
+    webUrl,
+    thumbUrl: kind === "video" ? (posterUrl ?? webUrl) : storage.url(p.thumbKey),
+    posterUrl,
+    durationSec,
     width: p.width,
     height: p.height,
     caption: p.caption,
@@ -46,8 +79,10 @@ function serializeStop(s: StopWithRelations) {
     occurredAt: s.occurredAt ? s.occurredAt.toISOString() : null,
     body: s.body,
     motif: s.motif,
+    feeling: normalizeFeeling(s.feeling),
+    feelingPlacement: readPlacement(s.feelingPlacement),
     tags: s.tags.map(serializeTag),
-    photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializePhoto),
+    photos: [...s.photos].sort((a, b) => a.order - b.order).map(serializeMedia),
   };
 }
 
@@ -57,6 +92,8 @@ function serializeTrip(t: TripFull) {
     title: t.title,
     description: t.description,
     theme: t.theme,
+    // Phase 2.6 — the trip's opening feeling (the story's first beat).
+    feeling: normalizeFeeling(t.feeling),
     isPublished: t.isPublished,
     shareSlug: t.shareSlug,
     stops: [...t.stops].sort((a, b) => a.order - b.order).map(serializeStop),
@@ -71,6 +108,9 @@ const patchSchema = z.object({
   description: z.string().nullable().optional(),
   coverPhotoId: z.string().nullable().optional(),
   theme: themeEnum.optional(),
+  // Phase 2.6 — omitted means "leave untouched" (non-destructive PATCH);
+  // blank/whitespace normalises to null and renders nothing.
+  feeling: z.string().max(MAX_FEELING_CHARS).nullable().optional(),
 });
 
 function loadFullTrip(tripId: string) {
@@ -122,6 +162,10 @@ async function handlePatch(
   if (parsed.data.description !== undefined) data.description = parsed.data.description;
   if (parsed.data.coverPhotoId !== undefined) data.coverPhotoId = parsed.data.coverPhotoId;
   if (parsed.data.theme !== undefined) data.theme = parsed.data.theme;
+  // Blank/whitespace-only clears the opening feeling rather than storing "  ".
+  if (parsed.data.feeling !== undefined) {
+    data.feeling = normalizeFeeling(parsed.data.feeling);
+  }
 
   if (Object.keys(data).length > 0) {
     await prisma.trip.update({ where: { id: tripId }, data });
@@ -144,6 +188,8 @@ async function handleDelete(tripId: string): Promise<NextResponse> {
   for (const stop of trip.stops) {
     for (const photo of stop.photos) {
       keys.push(photo.webKey, photo.thumbKey, photo.originalKey);
+      // P2.5: a video's poster object is deleted alongside the other keys.
+      if (photo.posterKey) keys.push(photo.posterKey);
     }
   }
 

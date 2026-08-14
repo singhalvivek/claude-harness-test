@@ -393,3 +393,106 @@ test("story decor: ambient background, per-stop motif ornament and closing outro
     .toBeGreaterThan(0.5);
   await expect(outro).toContainText("The journey ends here");
 });
+
+// ─── Phase 2.5 additions (appended; nothing above is modified) ───────────────
+
+test("a trip whose stops have no feeling renders exactly as before (no extra beats)", async ({
+  page,
+}) => {
+  // seedTrip creates stops WITHOUT a feeling, so every stop backfills to
+  // feeling = null / feelingPlacement = "card" — the shipped-story shape.
+  const tripId = await seedTrip(page);
+
+  // The API confirms the backfilled shape before we assert on the DOM.
+  const getTrip = await page.request.get(`/api/trips/${tripId}`);
+  expect(getTrip.ok(), await getTrip.text()).toBeTruthy();
+  const trip = await getTrip.json();
+  expect(trip.stops).toHaveLength(STOPS.length);
+  for (const s of trip.stops) {
+    expect(s.feeling).toBeNull();
+    expect(s.feelingPlacement).toBe("card");
+  }
+
+  await page.goto(`/trips/${tripId}/story`);
+
+  // No feeling → no beat, in EITHER placement, however the placement reads.
+  await expect(page.locator("[data-feeling-card]")).toHaveCount(0);
+  await expect(page.locator("[data-feeling-inline]")).toHaveCount(0);
+  await expect(page.locator("[data-feeling-quote]")).toHaveCount(0);
+
+  // One card per stop and nothing else: the beat list collapses to the stop
+  // list exactly as it did before Phase 2.5.
+  await expect(page.locator("[data-stop-card]")).toHaveCount(STOPS.length);
+
+  // The frozen hooks are all still here and the path still draws on scroll.
+  const path$ = page.locator("svg path[data-serpentine]");
+  await expect(path$).toHaveCount(1);
+  await expect(page.locator('[data-theme="cinematic"]')).toHaveCount(1);
+  await expect(page.locator("[data-theme-signature]").first()).toBeVisible();
+  await expect(page.locator("[data-story-marker]")).toHaveCount(1);
+  await expect(page.locator("[data-cover-photo]").first()).toBeVisible();
+
+  await expect
+    .poll(async () => path$.evaluate((el) => parseFloat(getComputedStyle(el).strokeDashoffset) || 0), {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(50);
+  const dashTop = await path$.evaluate((el) => parseFloat(getComputedStyle(el).strokeDashoffset));
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(700);
+
+  const dashBottom = await path$.evaluate((el) => parseFloat(getComputedStyle(el).strokeDashoffset));
+  expect(dashBottom).toBeLessThan(dashTop);
+});
+
+test("a feeling card stands on the path as its own beat, and adds a beat to the track", async ({
+  page,
+}) => {
+  const tripId = await seedTrip(page);
+
+  // Measure the track height with NO feelings (3 stop beats).
+  await page.goto(`/trips/${tripId}/story`);
+  // The serpentine <svg> is sized to the geometry's total track height.
+  const svg = page.locator("svg:has(path[data-serpentine])");
+  await expect(svg).toHaveCount(1);
+  const heightBefore = await svg.evaluate((el) => el.getBoundingClientRect().height);
+  const lengthBefore = await page
+    .locator("svg path[data-serpentine]")
+    .evaluate((el) => (el as unknown as SVGPathElement).getTotalLength());
+
+  // Give the FIRST stop a "card" feeling — it becomes a second beat.
+  const stops = await (await page.request.get(`/api/trips/${tripId}`)).json();
+  const patch = await page.request.patch(`/api/stops/${stops.stops[0].id}`, {
+    data: { feeling: "The whole city smelled of rain and cedar.", feelingPlacement: "card" },
+  });
+  expect(patch.ok(), await patch.text()).toBeTruthy();
+
+  await page.goto(`/trips/${tripId}/story`);
+  await expect(page.locator("[data-feeling-card]")).toHaveCount(1);
+  await expect(page.locator("[data-stop-card]")).toHaveCount(STOPS.length);
+
+  // The extra beat lengthens BOTH the track and the drawn path — proof the
+  // feeling card is on the serpentine, not floating beside it.
+  const heightAfter = await page
+    .locator("svg:has(path[data-serpentine])")
+    .evaluate((el) => el.getBoundingClientRect().height);
+  const lengthAfter = await page
+    .locator("svg path[data-serpentine]")
+    .evaluate((el) => (el as unknown as SVGPathElement).getTotalLength());
+  expect(heightAfter).toBeGreaterThan(heightBefore);
+  expect(lengthAfter).toBeGreaterThan(lengthBefore);
+
+  // It sits on the side OPPOSITE its stop (beats alternate), and it is never a
+  // descendant of a stop card.
+  const firstStopBox = await page.locator("[data-stop-card]").first().boundingBox();
+  const feelingBox = await page.locator("[data-feeling-card]").boundingBox();
+  expect(firstStopBox).not.toBeNull();
+  expect(feelingBox).not.toBeNull();
+  const stopCentre = firstStopBox!.x + firstStopBox!.width / 2;
+  const feelingCentre = feelingBox!.x + feelingBox!.width / 2;
+  expect(Math.abs(feelingCentre - stopCentre)).toBeGreaterThan(100);
+  expect(
+    await page.locator("[data-feeling-card]").evaluate((el) => el.closest("[data-stop-card]") === null),
+  ).toBe(true);
+});

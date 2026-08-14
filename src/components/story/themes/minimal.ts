@@ -58,6 +58,52 @@ export const minimal: StoryThemeTreatment = {
     moreClassName: "inline-block pt-1 text-sm font-medium",
     moreStyle: { color: "#64748b" },
   },
+  // Feeling — engineered restraint: Space Grotesk 500 (a geometric techno
+  // grotesque) in a quiet vertical slate duotone on a white card with a
+  // hairline top rule and maximal whitespace. 46% at the shared 2% inset keeps
+  // the >= 4% horizontal centre gap, so opposite-side cards cannot collide.
+  feeling: {
+    segmentHeight: 320,
+    inlineExtraHeight: 48,
+    widthPct: 46,
+    maxWidth: 460,
+    sideInsetPct: 2,
+    cardClassName:
+      "relative overflow-hidden rounded-xl border-t px-7 py-7 shadow-sm ring-1 ring-slate-900/10",
+    cardStyle: { backgroundColor: "#ffffff", borderTopColor: "rgba(15,23,42,0.14)" },
+    quoteClassName: "line-clamp-5 whitespace-pre-line",
+    quoteStyle: {
+      fontFamily:
+        'var(--font-feeling-minimal), "Segoe UI", Roboto, system-ui, sans-serif',
+      fontWeight: 500,
+      fontSize: "clamp(1.5rem, 4.2vw, 2.5rem)",
+      lineHeight: 1.2,
+      letterSpacing: "-0.02em",
+      color: "#0f172a",
+    },
+    quoteGradient: "linear-gradient(180deg,#0f172a,#475569)",
+    markClassName: "block select-none",
+    markStyle: {
+      fontFamily:
+        'var(--font-feeling-minimal), "Segoe UI", Roboto, system-ui, sans-serif',
+      fontSize: "2.5rem",
+      lineHeight: 0.62,
+      color: "rgba(100,116,139,0.5)",
+    },
+    inlineClassName: "mt-3 border-l pl-3",
+    inlineStyle: { borderColor: "rgba(15,23,42,0.18)" },
+    inlineQuoteClassName: "line-clamp-3 whitespace-pre-line",
+    inlineQuoteStyle: {
+      fontFamily:
+        'var(--font-feeling-minimal), "Segoe UI", Roboto, system-ui, sans-serif',
+      fontWeight: 500,
+      fontSize: "1.25rem",
+      lineHeight: 1.35,
+      letterSpacing: "-0.01em",
+      color: "#0f172a",
+    },
+    flourish: "rule",
+  },
   chrome: {
     mainBg: "#f8fafc",
     headerClassName:

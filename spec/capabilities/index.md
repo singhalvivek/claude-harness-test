@@ -18,9 +18,12 @@ A single, discrete behavior the app performs (e.g. "authenticate the owner", "se
 | Photo gallery (upload / resize / cover) | 1 (core) | [photo-gallery.md](photo-gallery.md) |
 | Serpentine story view | 1 (core) | [serpentine-story-view.md](serpentine-story-view.md) |
 | Story themes (per-trip look) | 1.5 | [story-themes.md](story-themes.md) |
+| Story decor (motifs, ambient, intro/outro) | 1.5 (curated-story pass) | [story-decor.md](story-decor.md) |
 | Public share link | 2 | [public-share-link.md](public-share-link.md) |
 | Real-map overview | 2 | [real-map-overview.md](real-map-overview.md) |
 | Mood / activity tags + filter | 2 | [mood-activity-tags.md](mood-activity-tags.md) |
+| Video media (video as a first-class medium) | 2.5 | [video-media.md](video-media.md) |
+| Per-stop feeling cards | 2.5 | [feeling-cards.md](feeling-cards.md) |
 | Cloud photo storage (R2/S3) | 3 | [cloud-photo-storage.md](cloud-photo-storage.md) |
 | EXIF auto-location | 3 | [exif-auto-location.md](exif-auto-location.md) |
 | Rich (markdown) entries | 3 | [rich-blog-entries.md](rich-blog-entries.md) |

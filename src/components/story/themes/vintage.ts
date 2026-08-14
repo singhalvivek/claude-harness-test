@@ -73,6 +73,50 @@ export const vintage: StoryThemeTreatment = {
       "pointer-events-none absolute left-1/2 top-0 z-20 h-6 w-24 -translate-x-1/2 -translate-y-1/2 -rotate-3 shadow-sm ring-1 ring-black/5",
     tapeStyle: { backgroundColor: "rgba(226,214,178,0.72)" },
   },
+  // Feeling — the set's one true cursive: Caveat 600 in faded-ink gradient on a
+  // cream mat, tilted and taped like the rest of the scrapbook. The tilt rides
+  // on the NON-animated wrapper (`rotateDeg`, exactly like the stop cards) so it
+  // never fights Framer's enter transform on the card. 44% at the shared 2%
+  // inset leaves a ~12% horizontal centre gap — far more than a 1.5deg tilt can
+  // swing — so opposite-side cards cannot collide.
+  feeling: {
+    segmentHeight: 360,
+    inlineExtraHeight: 56,
+    widthPct: 44,
+    maxWidth: 430,
+    sideInsetPct: 2,
+    rotateDeg: 1.5,
+    cardClassName:
+      "relative overflow-hidden rounded-[3px] px-6 py-7 shadow-xl shadow-[#5a3a22]/25",
+    cardStyle: { backgroundColor: "#fdf7e6" },
+    quoteClassName: "line-clamp-5 whitespace-pre-line",
+    quoteStyle: {
+      fontFamily: 'var(--font-feeling-vintage), "Segoe Script", "Bradley Hand", cursive',
+      fontWeight: 600,
+      fontSize: "clamp(1.5rem, 4.2vw, 2.5rem)",
+      lineHeight: 1.22,
+      color: "#5a3a22",
+    },
+    quoteGradient: "linear-gradient(96deg,#b1372f,#8a4b2f 55%,#5a3a22)",
+    markClassName: "block select-none",
+    markStyle: {
+      fontFamily: 'var(--font-feeling-vintage), "Segoe Script", "Bradley Hand", cursive',
+      fontSize: "3rem",
+      lineHeight: 0.62,
+      color: "rgba(177,55,47,0.45)",
+    },
+    inlineClassName: "mt-3 border-l-2 pl-3",
+    inlineStyle: { borderColor: "rgba(177,55,47,0.55)" },
+    inlineQuoteClassName: "line-clamp-3 whitespace-pre-line",
+    inlineQuoteStyle: {
+      fontFamily: 'var(--font-feeling-vintage), "Segoe Script", "Bradley Hand", cursive',
+      fontWeight: 600,
+      fontSize: "1.25rem",
+      lineHeight: 1.35,
+      color: "#5a3a22",
+    },
+    flourish: "tape",
+  },
   chrome: {
     mainBg: "#cdb489",
     headerClassName:

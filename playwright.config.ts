@@ -28,7 +28,10 @@ export default defineConfig({
   webServer: {
     command: "pnpm start",
     url: "http://localhost:8001/health",
-    reuseExistingServer: !process.env.CI,
+    // The phase gate sets PLAYWRIGHT_REUSE_SERVER=0 to FORBID reuse: a stale
+    // server on 8001 serves OLD code and would silently green-light a broken
+    // build. Interactive local runs still reuse a dev/prod server.
+    reuseExistingServer: !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER !== "0",
     timeout: 120_000,
     stdout: "pipe",
     stderr: "pipe",

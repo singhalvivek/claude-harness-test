@@ -71,6 +71,57 @@ export const cinematic: StoryThemeTreatment = {
     moreClassName: "inline-block pt-1 text-sm font-medium",
     moreStyle: { color: "#fbbf24" },
   },
+  // Feeling — a film title card: Playfair Display 600 in amber gradient ink on
+  // the same dark glass the caption already uses. 380px beat vs a 371px stop
+  // card at 440px: adjacent centres are 410px apart while the two half-heights
+  // sum to at most ~360px, so cinematic's wide opposite-side cards (the only
+  // theme that overlaps horizontally) still clear by >= 50px.
+  feeling: {
+    segmentHeight: 380,
+    inlineExtraHeight: 64,
+    widthPct: 52,
+    maxWidth: 620,
+    sideInsetPct: 2,
+    cardClassName:
+      "relative overflow-hidden rounded-2xl border px-8 py-8 shadow-2xl shadow-black/60",
+    cardStyle: {
+      backgroundColor: "rgba(10,8,6,0.62)",
+      borderColor: "rgba(245,158,11,0.28)",
+      backdropFilter: "blur(14px)",
+      WebkitBackdropFilter: "blur(14px)",
+    },
+    quoteClassName: "line-clamp-5 whitespace-pre-line",
+    quoteStyle: {
+      fontFamily: 'var(--font-feeling-cinematic), Georgia, "Times New Roman", serif',
+      fontWeight: 600,
+      fontSize: "clamp(1.5rem, 4.2vw, 2.5rem)",
+      lineHeight: 1.18,
+      letterSpacing: "-0.01em",
+      // Solid fallback ink — always set, shown whenever background-clip:text
+      // is unsupported and during SSR / the first paint.
+      color: "#fde68a",
+    },
+    quoteGradient: "linear-gradient(100deg,#fde68a,#fbbf24 45%,#fef3c7)",
+    markClassName: "block select-none",
+    markStyle: {
+      fontFamily: 'var(--font-feeling-cinematic), Georgia, "Times New Roman", serif',
+      fontSize: "3rem",
+      lineHeight: 0.62,
+      color: "rgba(251,191,36,0.42)",
+    },
+    inlineClassName: "mt-3 border-l-2 pl-3",
+    inlineStyle: { borderColor: "rgba(245,158,11,0.55)" },
+    // Overlay-caption theme → clamp to 2 lines so the glass never outgrows the hero.
+    inlineQuoteClassName: "line-clamp-2 whitespace-pre-line",
+    inlineQuoteStyle: {
+      fontFamily: 'var(--font-feeling-cinematic), Georgia, "Times New Roman", serif',
+      fontWeight: 600,
+      fontSize: "1.25rem",
+      lineHeight: 1.3,
+      color: "#fde68a",
+    },
+    flourish: "rule",
+  },
   chrome: {
     mainBg: "#1c1917",
     headerClassName:

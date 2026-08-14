@@ -67,7 +67,9 @@ All boxes except the two OSM dependencies are inside the one app. `slice-foundat
 |------------|---------|--------------|
 | **Nominatim** (OpenStreetMap geocoding) | Resolve place-name search + reverse-geocode a map click into coordinates + display name | Proxied server-side with a proper `User-Agent`; on error/timeout the API returns `502` and the UI surfaces "geocoding unavailable — enter location manually" and lets the owner save a **text-only** location (precision `none`) rather than guessing. |
 | **OSM tile server** | Leaflet map tiles in the editor picker and (P2) the map overview | If tiles fail to load, the map container still renders and manual lat/lng entry remains available; degraded, not blocking. |
-| **Local disk** (P1) / **R2/S3** (P3) | Photo byte storage behind `PhotoStorage` | Disk-full / write error → `500` with a clear message; the `Stop` is preserved, only the photo fails and can be retried. |
+| **Local disk** (dev) / **Cloudflare R2** (deployed) | Media byte storage behind `PhotoStorage`, including direct browser uploads via presigned `PUT` | Disk-full / write error → `500` with a clear message; the `Stop` is preserved, only that media item fails and can be retried. |
+| **Browser media APIs** (P2.5) — `<video>` metadata, `canvas.toBlob`, `IntersectionObserver`, `HTMLMediaElement.play()` | Read video width/height/duration, capture the poster frame, autoplay-in-view | Decode failure / 8 s timeout → no poster + zero dimensions; the upload still completes and the UI shows a labelled placeholder. Rejected `play()` (autoplay policy) → visible ▶ control. Unsupported codec → poster + "can't play in this browser" + Download. Never a broken black box. |
+| **Google Fonts via `next/font/google`** (P2.5) | The four per-theme feeling display faces, self-hosted at build time by `next/font` (no runtime request to Google) | A build-time fetch failure fails `pnpm build` loudly; at runtime each `quoteStyle.fontFamily` carries a matching fallback stack, so a missing face degrades to a same-class system font. |
 
 **Secrets / env:** documented in `.env.example`. Required for a secured deployment: `OWNER_PASSWORD`, `SESSION_SECRET`. Provided with **safe dev defaults** so the app boots without them (a visible warning shows when defaults are in use). `DATABASE_URL` defaults to `file:./dev.db`; `PHOTO_STORAGE_DIR` defaults to `./storage/photos`. `NOMINATIM_USER_AGENT` has a default identifying the app. `R2_*` vars are commented placeholders, unused until Phase 3. **No LLM/API keys exist.** The real `.env` is gitignored; only `.env.example` is committed.
 
@@ -82,7 +84,7 @@ All boxes except the two OSM dependencies are inside the one app. `slice-foundat
 - **Agent framework:** **none** — no AI/LLM. See `agent.md`.
 - **LLM provider + model:** **none.**
 - **Backend:** Next.js Route Handlers (no separate service).
-- **Database + ORM:** **SQLite** (file-based) via **Prisma 5.x**. SQLite is the production database here — authoritative, not a stand-in for PostgreSQL, so the "no-SQLite-substitute" rule does not apply. Migrations via `prisma migrate`.
+- **Database + ORM:** **PostgreSQL** via **Prisma 5.x** — **Neon** in the live Vercel deployment; `datasource db { provider = "postgresql" }`. Migrations via `prisma migrate`, written as Postgres DDL. *(Phase 1/1.5 shipped on SQLite; the datasource moved to Postgres at deployment. Postgres is now authoritative — every gate uses the production driver, and destructive gate work runs in an isolated `test_gate` schema, never `public`.)*
 - **Frontend:** Next.js 15 + React 19, **Tailwind CSS** for styling, **Framer Motion** for enter/parallax animations, native **SVG** `stroke-dashoffset` for draw-on-scroll, **react-leaflet** + **Leaflet** for maps.
 - **Photo processing:** **sharp** (resize → web + thumbnail; retain original).
 - **Dependency management:** **pnpm**.
@@ -104,9 +106,24 @@ All boxes except the two OSM dependencies are inside the one app. `slice-foundat
 | `vitest` | 1/2 | unit/integration (from P3) |
 | `exifr` | 7 | (P3) EXIF GPS/timestamp parsing |
 | `marked` + `dompurify` (or `react-markdown`) | latest | (P3) markdown render |
-| `@aws-sdk/client-s3` | 3 | (P3) R2/S3 storage backend |
+| `aws4fetch` | 1.0.20+ | **the only** R2/S3 signer — SigV4 over `fetch`, used for object PUT/DELETE **and** presigned upload URLs (video + poster included) |
 
-**Avoid:** any LLM/agent SDK (out of scope); PostgreSQL/other DB engines (SQLite is authoritative here); a separate Python/FastAPI service; storing photo bytes in the DB (files go through `PhotoStorage`); Prisma scalar-list fields (`String[]`) — unsupported on SQLite, so tags (P2) use a relation table, never an array column; putting uploads under `public/` (breaks the R2-swap URL indirection — serve via `/api/media`).
+**Phase 2.5 dependency decisions (no new runtime packages):**
+- **NEVER add the AWS SDK** (`@aws-sdk/*`). Every R2 interaction, including the poster object's presigned `PUT`, goes through the existing `aws4fetch` client in `src/lib/storage/r2.ts`. (An earlier draft of this table listed `@aws-sdk/client-s3`; it was never installed and is now explicitly forbidden.)
+- **NEVER add `ffmpeg`, `ffprobe`, `fluent-ffmpeg`, `@ffmpeg/*` or any server-side transcoding/probing package.** All video metadata **and** the poster frame are produced **client-side in the browser**. The server stores bytes it never decodes.
+- **`sharp` must never receive video bytes.** `complete` does not call `sharp`; the legacy multipart route branches on MIME **before** `processUpload` and returns 415 for video.
+- The only additions this phase are four **`next/font/google`** faces (build-time self-hosted, no new package), one per theme and each from a **different type class** so they can never be mistaken for one another or for the chrome (Fraunces + Inter):
+
+  | Theme | Face | Register | CSS variable | Weight |
+  |-------|------|----------|--------------|--------|
+  | cinematic | **Playfair Display** | dramatic display serif | `--font-feeling-cinematic` | `"600"` |
+  | editorial | **Bodoni Moda** | high-contrast didone | `--font-feeling-editorial` | `"700"` |
+  | minimal | **Space Grotesk** | geometric techno grotesque | `--font-feeling-minimal` | `"500"` |
+  | vintage | **Caveat** | cursive handwriting (the only script in the set) | `--font-feeling-vintage` | `"600"` |
+
+  All four: `subsets: ["latin"]`, `display: "swap"`, one weight each, registered in `src/app/layout.tsx` and appended to the `<html>` className. **No `axes` option on Bodoni Moda.** See [`ui.md`](ui.md) for the fallback stacks and the per-theme rationale (including why Cormorant Garamond was rejected for cinematic and Pinyon Script for vintage). **No script/handwriting face is used for `editorial`.**
+
+**Avoid:** any LLM/agent SDK (out of scope); a separate Python/FastAPI service; storing media bytes in the DB (files go through `PhotoStorage`); Prisma scalar-list fields (`String[]`) — tags use a relation table; putting uploads under `public/` (breaks the R2 URL indirection — serve via `/api/media`); a parallel `Video` model (video is a `kind` on `Photo`).
 
 ---
 
@@ -129,7 +146,7 @@ export interface PhotoStorage {
 ```
 **`src/lib/storage/index.ts`** — `export const storage: PhotoStorage` selected by `env.PHOTO_STORAGE_BACKEND` (P1: always `LocalDiskStorage`; P3 adds `R2Storage`). Call sites use only `storage`; swapping the backend touches no call site.
 
-**`src/lib/photos.ts`** — `export async function processUpload(file: { buffer: Buffer; filename: string; contentType: string }, opts: { tripId: string; stopId: string }): Promise<{ webKey: string; thumbKey: string; originalKey: string; width: number; height: number }>`. **Displays the ORIGINAL at full resolution — no downscaling** (owner decision; slower loads accepted). Always retains the untouched original; `webKey`/`thumbKey` point at the *displayed* object, which equals `originalKey` for browser-renderable formats (JPEG/PNG/WebP/GIF/AVIF) or a **full-resolution** upright JPEG fallback for formats browsers can't show inline (HEIC/HEIF/TIFF/…). sharp is used only to read metadata (upright dimensions via EXIF orientation) and for the fallback encode. Callers resolve URLs via `storage.url(key)`.
+**`src/lib/photos.ts`** — `export async function processUpload(file: { buffer: Buffer; filename: string; contentType: string }, opts: { tripId: string; stopId: string }): Promise<{ webKey: string; thumbKey: string; originalKey: string; width: number; height: number }>`. **Displays the ORIGINAL at full resolution — no downscaling** (owner decision; slower loads accepted). Always retains the untouched original; `webKey`/`thumbKey` point at the *displayed* object, which equals `originalKey` for browser-renderable formats (JPEG/PNG/WebP/GIF/AVIF) or a **full-resolution** upright JPEG fallback for formats browsers can't show inline (HEIC/HEIF/TIFF/…). sharp is used only to read metadata (upright dimensions via EXIF orientation) and for the fallback encode. Callers resolve URLs via `storage.url(key)`. **Signature unchanged in Phase 2.5 — and it must NEVER be called with video bytes**: its single caller (the legacy multipart route) branches on MIME first and returns 415 for video; the direct-upload `complete` route does not import it at all.
 
 **`src/lib/api-client.ts`** — typed `fetch` wrappers matching every route in `api.md` (e.g. `createTrip`, `listTrips`, `getTrip`, `addStop`, `reorderStops`, `uploadPhotos`, `setCover`, `geocode`). Both frontend slices import these; the shapes equal `api.md`'s response types. **Phase-1.5 additions (frozen — all three theme slices code against these):**
 ```ts
@@ -138,6 +155,141 @@ export type StoryTheme = "cinematic" | "editorial" | "minimal" | "vintage"; // d
 - `Trip.theme: StoryTheme` and `TripSummary.theme: StoryTheme` added to the response types.
 - `CreateTripInput.theme?: StoryTheme` and `TripPatch.theme?: StoryTheme` added to the input types.
 - Existing wrappers (`createTrip`, `updateTrip`, `getTrip`, `listTrips`) carry `theme` unchanged in signature — only the type shapes gain the field. `src/lib/api-client.ts` is edited **only** by `slice-theme-data-api`; the two frontend theme slices import `StoryTheme`/`Trip` from it (contract dependency, not a write).
+
+**Phase-2.5 additions to `src/lib/api-client.ts` (frozen — written ONLY by `slice-media-data`; every other slice imports them):**
+```ts
+export type MediaKind = "photo" | "video";
+export type FeelingPlacement = "card" | "inline" | "none";
+
+/** Accepted video content types (MIME parameters stripped before matching). */
+export const VIDEO_MIME_TYPES: readonly string[]; // ["video/mp4","video/quicktime","video/webm"]
+export const MAX_FEELING_CHARS: 200;
+
+export interface Photo {           // unchanged fields + these three
+  kind: MediaKind;                 // "photo" for every pre-existing row
+  posterUrl: string | null;        // video only
+  durationSec: number | null;      // video only
+}
+export type Media = Photo;         // domain alias; the DB table stays `Photo`
+
+export interface Stop {            // unchanged fields + these two
+  feeling: string | null;
+  feelingPlacement: FeelingPlacement;
+}
+export interface StopInput {       // (= StopPatch) unchanged fields + these two
+  feeling?: string | null;
+  feelingPlacement?: FeelingPlacement;
+}
+
+/** True when `file` is one of the accepted video types (MIME, else extension). */
+export function isVideoFile(file: File): boolean;
+
+/** Browser-only. Reads intrinsic size + duration from a <video> and captures a
+ *  poster JPEG via canvas.toBlob(). NEVER server-side — no ffmpeg exists.
+ *  Resolves { width:0, height:0, durationSec:null, poster:null } on decode
+ *  failure or after an 8s timeout; always revokes its object URL. */
+export function readVideoMetadata(file: File): Promise<{
+  width: number; height: number; durationSec: number | null; poster: Blob | null;
+}>;
+
+/** Upload ONE media item (photo OR video) directly to storage:
+ *  presign (video → also a poster target) → PUT bytes → PUT poster → complete.
+ *  A failed poster PUT still completes the video, without a posterKey. */
+export function uploadMediaDirect(
+  stopId: string,
+  file: File,
+  onStage?: (stage: "reading" | "uploading" | "poster" | "finishing") => void,
+): Promise<Media>;
+
+/** Kept as a thin alias of uploadMediaDirect so no existing call site breaks. */
+export function uploadPhotoDirect(stopId: string, file: File): Promise<Photo>;
+```
+
+**`src/components/story/CoverMedia.tsx`** *(new, Phase 2.5 — frozen; written ONLY by `slice-story-video`, imported by `slice-story-feeling`'s `StopCard`)*:
+```ts
+export interface CoverMediaProps {
+  media: Media;                  // kind "photo" | "video"
+  alt: string;
+  reduce: boolean;               // prefers-reduced-motion
+  y: MotionValue<number>;        // parallax translateY supplied by StopCard
+  accent: string;                // theme accent, tints the mute/play controls
+  /** Rendered instead of the media when the object fails to load. */
+  fallback: ReactNode;
+}
+export function CoverMedia(props: CoverMediaProps): JSX.Element;
+```
+Renders `[data-cover-photo]` for **both** kinds (so the shipped parallax/cover assertions hold), **adds** `[data-cover-video]` for videos, owns the IntersectionObserver autoplay/pause, the `[data-video-mute-toggle]`, the reduced-motion `[data-video-play]` control and the `[data-video-unplayable]` labelled fallback. It keeps the shipped cover classes (`absolute -top-[8%] left-0 h-[116%] w-full object-cover`) and the ken-burns drift for photos.
+
+**`src/components/story/serpentine.ts`** *(Phase-2.5 additions — strictly additive; `slice-story-feeling`)*:
+```ts
+export type BeatKind = "stop" | "feeling";
+export interface Beat { kind: BeatKind; stopIndex: number; }      // index into the SHOWN stops
+export interface BeatLayout extends Beat {
+  index: number; side: "left" | "right"; cx: number; cy: number; height: number;
+}
+export interface SerpentineGeometry { /* …existing fields… */ beats: BeatLayout[]; }
+
+/** [stop0, feeling0?, stop1, feeling1?, …] — a feeling beat is emitted only when
+ *  the stop's feeling is non-blank AND feelingPlacement === "card". */
+export function buildBeats(stops: Pick<Stop, "feeling" | "feelingPlacement">[]): Beat[];
+
+/** Variable-height geometry. Stop beats get `segmentHeight` (+ `inlineExtra` when
+ *  that stop renders an inline pull-quote); feeling beats get
+ *  `feelingSegmentHeight` (clamped to 200–420px). Sides alternate by BEAT index;
+ *  cy is the running cumulative centre. */
+export function buildBeatGeometry(width: number, beats: Beat[], opts: {
+  segmentHeight: number; feelingSegmentHeight: number; inlineExtra: number;
+  hasInline: (stopIndex: number) => boolean;
+}): SerpentineGeometry;
+```
+`buildGeometry(width, count, segmentHeight)` keeps its exact signature and behaviour (uniform heights) and now also fills `beats`. `nodeAnchors(geom)` returns one `NodeAnchor` per **beat**, derived from `geom.beats`; `serpentinePathD(geom)` is unchanged and therefore threads the path through every beat, feeling cards included. Motif ornaments look up the anchor of the **stop** beat with the matching `stopIndex`.
+
+**`src/components/story/themes/types.ts`** *(Phase-2.5 addition — `slice-story-feeling`)*: a new required `feeling: FeelingTreatment` block on `StoryThemeTreatment`, in the existing house style (pure data — Tailwind classNames for structure, inline `CSSProperties` for dynamic colour):
+```ts
+export interface FeelingTreatment {
+  /** Height (px) a standalone feeling beat occupies on the path. */
+  segmentHeight: number;
+  /** Extra height (px) added to a STOP beat that renders an inline pull-quote. */
+  inlineExtraHeight: number;
+  /** Card footprint. Must satisfy widthPct <= card.widthPct and reuse
+   *  card.sideInsetPct, so no new horizontal collision risk is introduced. */
+  widthPct: number;
+  maxWidth: number;
+  sideInsetPct: number;
+  /** The standalone [data-feeling-card] surface. */
+  cardClassName: string;
+  cardStyle?: CSSProperties;
+  /** The [data-feeling-quote] display text. `quoteStyle.color` is ALWAYS the
+   *  solid fallback ink and must be set. */
+  quoteClassName: string;
+  /** MUST include fontFamily: "var(--font-feeling-<theme>), <that theme's
+   *  fallback stack>" — cinematic: Playfair Display / Georgia, "Times New
+   *  Roman", serif · editorial: Bodoni Moda / "Didot", "Bodoni MT", "Times New
+   *  Roman", serif · minimal: Space Grotesk / "Segoe UI", Roboto, system-ui,
+   *  sans-serif · vintage: Caveat / "Segoe Script", "Bradley Hand", cursive.
+   *  The fallback must stay in the SAME type class as the webfont, so a failed
+   *  load never degrades into Fraunces. See ui.md. */
+  quoteStyle: CSSProperties;
+  /** Optional multi-colour ink. Applied as `backgroundImage` +
+   *  background-clip:text + color:transparent ONLY when the browser reports
+   *  support; otherwise quoteStyle.color shows. */
+  quoteGradient?: string;
+  /** Decorative opening quote mark. */
+  markClassName: string;
+  markStyle?: CSSProperties;
+  /** The [data-feeling-inline] pull-quote inside a stop card. */
+  inlineClassName: string;
+  inlineStyle?: CSSProperties;
+  inlineQuoteClassName: string;
+  /** Same `fontFamily` as quoteStyle (one face per theme), at the smaller
+   *  ~20px inline size — that size is a legibility constraint on the face
+   *  choice, not an afterthought. */
+  inlineQuoteStyle: CSSProperties;
+  /** Theme flourish on the standalone card. */
+  flourish: "rule" | "tape" | "none";
+}
+```
+**Gradient fallback mechanism (frozen):** `FeelingCard` renders the quote with `style={{ ...quoteStyle }}` (solid colour) on first paint, and only after mount — when `typeof CSS !== "undefined" && CSS.supports("-webkit-background-clip", "text")` — merges `{ backgroundImage: quoteGradient, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }`. Unsupported browsers, SSR and the pre-hydration paint all show the solid themed ink, so the text is never invisible.
 
 **`src/lib/logger.ts`** — `export const log: { info; warn; error }` emitting single-line JSON `{ ts, level, msg, ...fields }` to stdout. Route handlers log `{ method, path, status, ms }` per request (observability from day one; no LLM tracing since there is no LLM).
 

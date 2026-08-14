@@ -36,3 +36,6 @@ next-env.d.ts
 .DS_Store
 *.log
 /coverage
+
+# phase-2.5 gate scratch storage (throwaway, never committed)
+/.gate-storage

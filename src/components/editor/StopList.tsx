@@ -4,6 +4,23 @@ import { type Stop } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { formatDateTime } from "./format";
 
+/** Neutral film-strip mark for a video cover that has no poster frame. */
+function FilmStripMark() {
+  return (
+    <svg
+      viewBox="0 0 24 16"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      className="h-4 w-6"
+    >
+      <rect x="1" y="1" width="22" height="14" rx="2" />
+      <path d="M6.5 1v14M17.5 1v14" />
+    </svg>
+  );
+}
+
 function StopCard({
   stop,
   index,
@@ -23,6 +40,10 @@ function StopCard({
 }) {
   const cover = stop.photos.find((p) => p.isCover) ?? stop.photos[0];
   const label = stop.placeName || stop.title || "Untitled stop";
+  const coverIsVideo = cover?.kind === "video";
+  // A video's poster is the only image safe in an <img>; without one we show a
+  // neutral film-strip tile rather than a broken image.
+  const coverSrc = cover ? (coverIsVideo ? cover.posterUrl : cover.thumbUrl) : null;
 
   return (
     <li
@@ -34,12 +55,38 @@ function StopCard({
         {index + 1}
       </span>
       {cover ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={cover.thumbUrl}
-          alt=""
-          className="h-14 w-14 shrink-0 rounded-md object-cover"
-        />
+        <span
+          data-testid="stop-cover-thumb"
+          data-media-kind={cover.kind}
+          className="relative block h-14 w-14 shrink-0"
+        >
+          {coverSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              data-testid="stop-cover-image"
+              src={coverSrc}
+              alt=""
+              className="h-14 w-14 rounded-md object-cover"
+            />
+          ) : (
+            <span
+              data-testid="stop-cover-filmstrip"
+              title="Video — no preview frame"
+              className="flex h-14 w-14 items-center justify-center rounded-md bg-ink/5 text-ink/40"
+            >
+              <FilmStripMark />
+            </span>
+          )}
+          {coverIsVideo && (
+            <span
+              data-testid="stop-cover-video-badge"
+              aria-label="Video cover"
+              className="absolute bottom-0.5 right-0.5 rounded bg-ink/75 px-1 py-px text-[9px] font-semibold leading-none text-paper"
+            >
+              ▶
+            </span>
+          )}
+        </span>
       ) : (
         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-ink/5 text-[10px] text-ink/40">
           No photo

@@ -61,6 +61,37 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ---
 
+## Applying the Phase 2.5 migration (advisory-lock timeout)
+
+`prisma migrate deploy` takes a Postgres **session advisory lock** (`72707369`)
+before it touches `_prisma_migrations`. Against this Neon compute that lock query
+times out after Prisma's fixed 10 s and the command dies with:
+
+```
+Error: P1002 … Timed out trying to acquire a postgres advisory lock
+(SELECT pg_advisory_lock(72707369)). Elapsed: 10000ms.
+```
+
+This is **not** contention — it reproduces with the compute warm, no other
+backend connected, and `pg_locks` empty. Because the Vercel **Build Command**
+runs `pnpm prisma migrate deploy` on every deploy, this will fail the *deploy*,
+not just a local run.
+
+**Remedy — set this in Vercel → Settings → Environment Variables:**
+
+```
+PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1
+```
+
+The lock's only job is to stop two `migrate deploy` runs racing each other. It
+does not affect the migration's contents or safety, and the Phase 2.5 migration
+is purely additive (`ADD COLUMN` with defaults). The one precaution: **don't
+trigger two deploys simultaneously while a migration is still pending** — let
+one finish before pushing again. The local gate (`pnpm gate:phase`) already sets
+this flag for the same reason.
+
+---
+
 ## The one code change that needs your DB URL
 
 The database provider is still `sqlite` in `prisma/schema.prisma` so local dev/tests stay green.
