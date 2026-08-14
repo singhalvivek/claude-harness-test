@@ -97,9 +97,19 @@ export type Media = Photo;
 
 // ─── Feeling (Phase 2.5) ─────────────────────────────────────────────────────
 
-/** How a stop's feeling renders: its own beat on the serpentine (`card`), a
- *  pull-quote inside the stop card (`inline`), or kept but hidden (`none`). */
-export type FeelingPlacement = "card" | "inline" | "none";
+/** How a stop's feeling renders on the path:
+ *  - `before` — its own beat standing BEFORE the stop it belongs to (so the
+ *    first stop's feeling opens the story, ahead of any stop card);
+ *  - `card`   — its own beat AFTER the stop (the default, and the original
+ *    Phase-2.5 meaning — unchanged so existing rows keep rendering as-is);
+ *  - `inline` — a pull-quote inside the stop card;
+ *  - `none`   — kept in the DB but not rendered. */
+export type FeelingPlacement = "before" | "card" | "inline" | "none";
+
+/** The single source of truth for the placement values, shared by the zod
+ *  enums in every route so a new value can never be accepted by one endpoint
+ *  and rejected by another. */
+export const FEELING_PLACEMENTS = ["before", "card", "inline", "none"] as const;
 
 /** Maximum length of a stop's feeling line (zod-validated server-side; longer → 400). */
 export const MAX_FEELING_CHARS = 200;
@@ -127,6 +137,9 @@ export interface Trip {
   title: string;
   description: string | null;
   theme: StoryTheme;
+  /** Phase 2.6 — an epigraph for the whole journey (≤ MAX_FEELING_CHARS),
+   *  rendered as the FIRST beat on the path, before any stop. Blank → null. */
+  feeling: string | null;
   isPublished: boolean;
   shareSlug: string | null;
   stops: Stop[];
@@ -169,6 +182,9 @@ export interface TripPatch {
   description?: string;
   coverPhotoId?: string | null;
   theme?: StoryTheme;
+  /** Phase 2.6 — omitted means "leave untouched" (non-destructive PATCH).
+   *  Blank/whitespace normalises to null server-side. */
+  feeling?: string | null;
 }
 
 export interface StopInput {

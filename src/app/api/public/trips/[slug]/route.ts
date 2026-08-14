@@ -12,6 +12,7 @@ import type { Trip, Stop, Photo } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { log } from "@/lib/logger";
+import { FEELING_PLACEMENTS } from "@/lib/api-client";
 import type { FeelingPlacement, MediaKind } from "@/lib/api-client";
 
 // The Tag/StopTag Prisma models are added by the parallel slice-tags migration;
@@ -22,10 +23,9 @@ type TagJoin = { tag: { id: string; label: string; kind: string } };
 type StopWithRelations = Stop & { photos: Photo[]; tags: TagJoin[] };
 type TripFull = Trip & { stops: StopWithRelations[] };
 
-// Frozen FeelingPlacement enum (spec/api.md + spec/capabilities/feeling-cards.md).
-const FEELING_PLACEMENTS = ["card", "inline", "none"] as const;
-
-/** Unknown/absent placement falls back to "card" (feeling-cards.md). */
+/** Unknown/absent placement falls back to "card" (feeling-cards.md).
+ *  FEELING_PLACEMENTS is imported, not re-declared, so every route accepts
+ *  exactly the same value set. */
 function readPlacement(value: unknown): FeelingPlacement {
   return (FEELING_PLACEMENTS as readonly string[]).includes(value as string)
     ? (value as FeelingPlacement)
@@ -99,6 +99,9 @@ function serializePublicTrip(t: TripFull) {
     title: t.title,
     description: t.description,
     theme: t.theme,
+    // Phase 2.6 — the opening feeling is part of the story, so a shared reader
+    // gets exactly the same first beat the owner sees.
+    feeling: normalizeFeeling(t.feeling),
     isPublished: t.isPublished,
     shareSlug: t.shareSlug,
     stops: [...t.stops].sort((a, b) => a.order - b.order).map(serializeStop),

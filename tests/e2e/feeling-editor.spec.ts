@@ -59,7 +59,7 @@ async function openNewStopDrawer(page: Page, placeName: string) {
 }
 
 /** One placement option of the segmented toggle. */
-function placementOption(page: Page, id: "card" | "inline" | "none") {
+function placementOption(page: Page, id: "before" | "card" | "inline" | "none") {
   return page.locator(`[data-testid="stop-feeling-placement"][data-placement="${id}"]`);
 }
 
@@ -135,8 +135,14 @@ test("feeling autosaves on blur, placement live-saves, and Save stop never clear
   expect(blurBody.feeling).toBe(FEELING);
   await expect(page.getByTestId("stop-feeling-status")).toHaveText("Saved ✓");
 
-  // --- Placement: three options, `card` selected by default ---
-  await expect(page.getByTestId("stop-feeling-placement")).toHaveCount(3);
+  // --- Placement: FOUR options since Phase 2.6 ("before" joined the set),
+  // `card` (= its own card AFTER the stop) still selected by default so no
+  // existing stop changes meaning. Still an exact count, and each id is named
+  // so a silently dropped or renamed option fails here.
+  await expect(page.getByTestId("stop-feeling-placement")).toHaveCount(4);
+  for (const id of ["before", "card", "inline", "none"] as const) {
+    await expect(placementOption(page, id)).toHaveCount(1);
+  }
   await expect(placementOption(page, "card")).toHaveAttribute("data-placement-selected", "true");
 
   // Clicking `inline` live-saves, sending ONLY { feelingPlacement }.

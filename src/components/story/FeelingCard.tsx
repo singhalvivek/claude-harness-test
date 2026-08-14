@@ -37,7 +37,8 @@ const container: Variants = {
 interface FeelingCardProps {
   /** The trimmed, non-blank feeling text. */
   text: string;
-  /** Id of the stop this feeling belongs to (for debugging / test targeting). */
+  /** Id of the stop this feeling belongs to (for debugging / test targeting).
+   *  For the trip-level opening card this is `trip-<tripId>`. */
   stopId: string;
   side: "left" | "right";
   /** Vertical center (px) within the track where this card is anchored. */
@@ -46,6 +47,11 @@ interface FeelingCardProps {
   theme: StoryThemeTreatment;
   /** Theme accent color — tints the flourish rule. */
   accent: string;
+  /** Phase 2.6 — `"trip"` marks the story's opening epigraph, which stands
+   *  before every stop. It renders through the SAME themed surface as a stop
+   *  feeling (no fifth look is invented); only the `data-feeling-scope` hook
+   *  differs, so tests and CSS can tell the opening beat apart. */
+  scope?: "trip" | "stop";
 }
 
 export function FeelingCard({
@@ -56,6 +62,7 @@ export function FeelingCard({
   reduce,
   theme,
   accent,
+  scope = "stop",
 }: FeelingCardProps) {
   const f = theme.feeling;
 
@@ -116,6 +123,7 @@ export function FeelingCard({
     >
       <motion.figure
         data-feeling-card
+        data-feeling-scope={scope}
         {...articleProps}
         className={f.cardClassName}
         style={{

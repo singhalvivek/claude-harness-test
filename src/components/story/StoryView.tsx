@@ -61,7 +61,10 @@ export function StoryView({ trip }: { trip: Trip }) {
   // path, the marker and the total track height all flow through it. Beats have
   // heterogeneous heights (a feeling card has no photo, so it is shorter) and a
   // stop carrying an inline pull-quote is allotted extra room.
-  const beats = buildBeats(stops);
+  // Phase 2.6: a non-blank TRIP feeling contributes the story's opening beat,
+  // standing on the path before any stop; a stop whose placement is "before"
+  // puts its own card ahead of its stop instead of after it.
+  const beats = buildBeats(stops, trip.feeling);
   const geom = buildBeatGeometry(width, beats, {
     segmentHeight: theme.segmentHeight,
     feelingSegmentHeight: theme.feeling.segmentHeight,
@@ -249,6 +252,25 @@ export function StoryView({ trip }: { trip: Trip }) {
         {/* One card per BEAT along the path, order-ascending, alternating side:
             a stop card, or that stop's standalone feeling card. */}
         {anchors.map((anchor) => {
+          // The trip's opening feeling belongs to no stop — render it first and
+          // independently of the stops array.
+          if (anchor.scope === "trip") {
+            const text = feelingTextOf({ feeling: trip.feeling });
+            if (!text) return null;
+            return (
+              <FeelingCard
+                key="feeling-trip"
+                text={text}
+                stopId={`trip-${trip.id}`}
+                side={anchor.side}
+                top={anchor.cy}
+                reduce={reduce}
+                theme={theme}
+                accent={accent}
+                scope="trip"
+              />
+            );
+          }
           const stop = stops[anchor.stopIndex];
           if (!stop) return null;
           if (anchor.kind === "feeling") {

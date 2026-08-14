@@ -45,10 +45,20 @@ const INLINE_EXTRA_MAX = 240;
 /** What kind of thing stands on the path at a beat. */
 export type BeatKind = "stop" | "feeling";
 
-/** One beat in the story's ordered rhythm. `stopIndex` indexes the SHOWN stops. */
+/** Who owns a feeling beat: the TRIP (the opening epigraph, which stands before
+ *  every stop) or a single STOP. Stop beats are always `"stop"`-scoped. */
+export type BeatScope = "trip" | "stop";
+
+/** The `stopIndex` of the trip-level opening beat: it belongs to no stop. */
+export const TRIP_BEAT_INDEX = -1;
+
+/** One beat in the story's ordered rhythm. `stopIndex` indexes the SHOWN stops,
+ *  except on the trip beat where it is TRIP_BEAT_INDEX. */
 export interface Beat {
   kind: BeatKind;
   stopIndex: number;
+  /** `"trip"` only on the opening feeling beat. */
+  scope: BeatScope;
 }
 
 /** A beat placed on the path: its side, its centre and its vertical allotment. */
@@ -89,6 +99,8 @@ export interface NodeAnchor {
   cy: number;
   /** Which kind of beat this anchor belongs to. */
   kind: BeatKind;
+  /** "trip" only for the opening feeling beat. */
+  scope: BeatScope;
   /** The stop this beat belongs to (a feeling beat carries its stop's index). */
   stopIndex: number;
   /** Vertical space (px) allotted to this beat. */
@@ -121,7 +133,18 @@ export function rendersFeelingCard(
 ): boolean {
   if (!feelingTextOf(stop)) return false;
   const p = stop.feelingPlacement;
-  return p === "card" || p === undefined || p === null;
+  return p === "card" || p === "before" || p === undefined || p === null;
+}
+
+/**
+ * Does this stop's feeling card stand BEFORE the stop rather than after it?
+ * Only "before" leads; "card" (the default, and the original Phase-2.5
+ * meaning) still trails, so existing rows are untouched.
+ */
+export function feelingCardLeads(
+  stop: Pick<Stop, "feeling" | "feelingPlacement">,
+): boolean {
+  return rendersFeelingCard(stop) && stop.feelingPlacement === "before";
 }
 
 /** Does this stop render an inline pull-quote inside its own stop card? */
@@ -132,16 +155,33 @@ export function rendersFeelingInline(
 }
 
 /**
- * [stop0, feeling0?, stop1, feeling1?, …] — a feeling beat is emitted only when
- * the stop's feeling is non-blank AND feelingPlacement === "card".
+ * The ordered beat list, e.g.
+ *   [tripFeeling?, feeling0?, stop0, stop1, feeling1?, …]
+ *
+ * - A **trip** feeling (non-blank) always leads: it is the story's first beat,
+ *   standing ahead of every stop card.
+ * - A **stop** feeling beat is emitted when the feeling is non-blank and the
+ *   placement is a card one — BEFORE its stop for `"before"`, AFTER it for
+ *   `"card"` (the default, so pre-2.6 rows keep their existing rhythm).
+ *
+ * Side alternation is by beat index downstream, so inserting a leading beat
+ * simply flips which side everything after it sits on — the path still winds
+ * correctly and nothing overlaps, because heights drive the layout.
  */
 export function buildBeats(
   stops: Pick<Stop, "feeling" | "feelingPlacement">[],
+  tripFeeling?: string | null,
 ): Beat[] {
   const beats: Beat[] = [];
+  if (feelingTextOf({ feeling: tripFeeling ?? null })) {
+    beats.push({ kind: "feeling", stopIndex: TRIP_BEAT_INDEX, scope: "trip" });
+  }
   stops.forEach((stop, stopIndex) => {
-    beats.push({ kind: "stop", stopIndex });
-    if (rendersFeelingCard(stop)) beats.push({ kind: "feeling", stopIndex });
+    const card = rendersFeelingCard(stop);
+    const leads = card && feelingCardLeads(stop);
+    if (leads) beats.push({ kind: "feeling", stopIndex, scope: "stop" });
+    beats.push({ kind: "stop", stopIndex, scope: "stop" });
+    if (card && !leads) beats.push({ kind: "feeling", stopIndex, scope: "stop" });
   });
   return beats;
 }
@@ -198,6 +238,7 @@ export function buildBeatGeometry(
     layouts.push({
       kind: beat.kind,
       stopIndex: beat.stopIndex,
+      scope: beat.scope,
       index: i,
       side,
       cx: side === "left" ? leftX : rightX,
@@ -237,7 +278,7 @@ export function buildGeometry(
 ): SerpentineGeometry {
   const safeCount = Math.max(count, 0);
   const beats: Beat[] = [];
-  for (let i = 0; i < safeCount; i++) beats.push({ kind: "stop", stopIndex: i });
+  for (let i = 0; i < safeCount; i++) beats.push({ kind: "stop", stopIndex: i, scope: "stop" });
   return buildBeatGeometry(width, beats, {
     segmentHeight,
     feelingSegmentHeight: FEELING_SEGMENT_HEIGHT,
@@ -255,6 +296,7 @@ export function nodeAnchors(geom: SerpentineGeometry): NodeAnchor[] {
     cy: b.cy,
     kind: b.kind,
     stopIndex: b.stopIndex,
+    scope: b.scope,
     height: b.height,
   }));
 }

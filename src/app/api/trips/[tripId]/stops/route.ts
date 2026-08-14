@@ -7,11 +7,10 @@ import type { Stop } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
-import { MOTIF_IDS, MAX_FEELING_CHARS } from "@/lib/api-client";
+import { MOTIF_IDS, MAX_FEELING_CHARS, FEELING_PLACEMENTS } from "@/lib/api-client";
 import type { FeelingPlacement } from "@/lib/api-client";
 
-// Frozen FeelingPlacement enum (spec/api.md + spec/capabilities/feeling-cards.md).
-const FEELING_PLACEMENTS = ["card", "inline", "none"] as const;
+// Placement value set is imported, never re-declared (see api-client.ts).
 const feelingPlacementEnum = z.enum(FEELING_PLACEMENTS);
 
 /** Unknown/absent placement falls back to "card" (feeling-cards.md). */

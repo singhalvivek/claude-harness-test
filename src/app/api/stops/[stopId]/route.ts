@@ -8,13 +8,13 @@ import { prisma } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { requireOwner } from "@/lib/auth";
 import { log } from "@/lib/logger";
-import { MOTIF_IDS, MAX_FEELING_CHARS } from "@/lib/api-client";
+import { MOTIF_IDS, MAX_FEELING_CHARS, FEELING_PLACEMENTS } from "@/lib/api-client";
 import type { FeelingPlacement, MediaKind } from "@/lib/api-client";
 
 type StopWithPhotos = Stop & { photos: Photo[] };
 
-// Frozen FeelingPlacement enum (spec/api.md + spec/capabilities/feeling-cards.md).
-const FEELING_PLACEMENTS = ["card", "inline", "none"] as const;
+// Placement value set is imported, never re-declared, so a widened set can
+// never be accepted by one route and rejected by another.
 const feelingPlacementEnum = z.enum(FEELING_PLACEMENTS);
 
 /** Unknown/absent placement falls back to "card" (feeling-cards.md). */

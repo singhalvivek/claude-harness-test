@@ -82,9 +82,14 @@ type PlacementChoice = {
 
 const PLACEMENT_CHOICES: PlacementChoice[] = [
   {
+    id: "before",
+    label: "Its own card, before this stop",
+    hint: "The quote card leads into the stop. On stop 1 it opens the story.",
+  },
+  {
     id: "card",
-    label: "Its own card on the path",
-    hint: "A big quote card standing on the trail, beside this stop.",
+    label: "Its own card, after this stop",
+    hint: "A big quote card standing on the trail, just past this stop.",
   },
   {
     id: "inline",
@@ -118,6 +123,19 @@ function PlacementGlyph({ placement }: { placement: FeelingPlacement }) {
     "aria-hidden": true,
   };
 
+  if (placement === "before") {
+    // Same winding path, but the quote card sits ABOVE the stop card — the
+    // mirror image of "card", so the two read as a matched pair at a glance.
+    return (
+      <svg {...common}>
+        <path d="M17 1.5c0 4-6 4.5-6 9s6 5 6 9" strokeDasharray="3 2.5" />
+        <rect x="22" y="2.5" width="10.5" height="9" rx="1.6" fill="currentColor" opacity="0.14" />
+        <rect x="22" y="2.5" width="10.5" height="9" rx="1.6" />
+        <path d="M24.6 5.9v2.4M27 5.9v2.4" />
+        <rect x="1.5" y="14" width="8" height="7" rx="1.6" />
+      </svg>
+    );
+  }
   if (placement === "card") {
     // A winding path with a stop card on one side and the quote card opposite.
     return (
@@ -296,7 +314,9 @@ export function FeelingEditor({
       </div>
 
       <p className="mb-1.5 mt-3 text-xs font-medium text-ink/70">Where it shows in the story</p>
-      <div role="group" aria-label="Feeling placement options" className="grid gap-2 sm:grid-cols-3">
+      {/* Four choices since Phase 2.6 ("before" joined "after"), so a 2×2 grid
+          rather than four columns squeezed into the editor panel. */}
+      <div role="group" aria-label="Feeling placement options" className="grid gap-2 sm:grid-cols-2">
         {PLACEMENT_CHOICES.map(({ id, label, hint }) => {
           const isSelected = id === selectedPlacement;
           return (

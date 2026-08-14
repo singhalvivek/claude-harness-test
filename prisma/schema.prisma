@@ -17,6 +17,10 @@ model Trip {
   description  String?
   // story theme: "cinematic" | "editorial" | "minimal" | "vintage" (default cinematic)
   theme        String   @default("cinematic")
+  // Phase 2.6 — an epigraph for the whole journey, rendered as the FIRST beat
+  // on the serpentine, ahead of every stop. Max 200 chars (zod at the API
+  // boundary); blank -> null, and null renders nothing at all.
+  feeling      String?
   coverPhotoId String?
   // shareSlug / isPublished exist in Phase 1 (nullable / default) but are
   // only populated by the Phase 2 publish flow.
